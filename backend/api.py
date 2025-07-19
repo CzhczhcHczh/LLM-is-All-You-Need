@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from loguru import logger
 
 from database import get_db, create_user, get_user, UserCreate
-from agents import phase1_agent, phase2_agent, phase3_agent, phase4_agent
+from agents import search_agent, phase2_agent, phase3_agent, phase4_agent
 
 # Create main router
 router = APIRouter()
@@ -103,7 +103,7 @@ async def get_user_endpoint(user_id: int, db: Session = Depends(get_db)):
 async def search_jobs(request: SearchRequest):
     """Search for job postings."""
     try:
-        result = phase1_agent.search_jobs(
+        result = search_agent.search_jobs(
             search_query=request.search_query,
             location=request.location,
             max_results=request.max_results
@@ -126,7 +126,7 @@ async def search_jobs(request: SearchRequest):
 async def find_similar_jobs(user_profile: Dict[str, Any], n_results: int = 5):
     """Find similar jobs based on user profile."""
     try:
-        similar_jobs = phase1_agent.get_similar_jobs(user_profile, n_results)
+        similar_jobs = search_agent.get_similar_jobs(user_profile, n_results)
         
         return BaseResponse(
             success=True,
@@ -324,7 +324,7 @@ async def demo_full_workflow(
         
         # Phase 1: Search jobs
         logger.info("Demo: Starting Phase 1 - Job Search")
-        search_result = phase1_agent.search_jobs(search_query, max_results=max_jobs)
+        search_result = search_agent.search_jobs(search_query, max_results=max_jobs)
         workflow_results["phase1"] = search_result
         
         if not search_result["success"] or not search_result["data"]["jobs"]:

@@ -80,7 +80,7 @@ def test_backend_modules():
         return False
     
     try:
-        from backend.agents import phase1_agent
+        from backend.agents import search_agent
         print("✓ Agents module imported successfully")
     except ImportError as e:
         print(f"✗ Agents module import failed: {e}")

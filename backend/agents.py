@@ -16,141 +16,7 @@ from database import (
     HRFeedbackCreate, InterviewCreate, ScheduleCreate
 )
 
-
-class Phase1SearchAgent:
-    """Phase 1: Job search and data collection agent."""
-    
-    @staticmethod
-    def search_jobs(search_query: str, location: str = None, max_results: int = 20) -> Dict[str, Any]:
-        """Search for job postings and extract structured data."""
-        try:
-            logger.info(f"Starting job search for: {search_query}")
-            
-            # Search using Serper API
-            search_results = serper_service.search_jobs(
-                query=search_query,
-                location=location,
-                num_results=max_results
-            )
-            
-            if not search_results:
-                return {
-                    "success": False,
-                    "message": "No search results found",
-                    "data": {"jobs": [], "companies": []}
-                }
-            
-            # Process search results with LLM
-            jobs = []
-            companies = {}
-            
-            for result in search_results:
-                # Extract job information using LLM
-                extraction_prompt = f"""
-                请从以下搜索结果中提取招聘信息，返回JSON格式：
-                
-                标题: {result.get('title', '')}
-                链接: {result.get('link', '')}
-                描述: {result.get('snippet', '')}
-                
-                请提取以下信息并返回JSON格式：
-                {{
-                    "job_title": "职位名称",
-                    "company_name": "公司名称",
-                    "location": "工作地点",
-                    "salary_range": "薪资范围",
-                    "requirements": ["要求1", "要求2"],
-                    "skills": ["技能1", "技能2"],
-                    "description": "职位描述",
-                    "is_valid_job": true/false
-                }}
-                
-                如果这不是一个有效的招聘信息，请设置 is_valid_job 为 false。
-                """
-                
-                try:
-                    extraction_result = llm_service.call_phase1_model(extraction_prompt)
-                    
-                    # Parse JSON result
-                    import re
-                    json_match = re.search(r'\{.*\}', extraction_result, re.DOTALL)
-                    if json_match:
-                        job_data = json.loads(json_match.group())
-                        
-                        if job_data.get('is_valid_job', False):
-                            # Add source information
-                            job_data.update({
-                                'source_url': result.get('link', ''),
-                                'search_query': search_query,
-                                'extracted_at': datetime.now().isoformat()
-                            })
-                            
-                            jobs.append(job_data)
-                            
-                            # Collect company information
-                            company_name = job_data.get('company_name', '')
-                            if company_name and company_name not in companies:
-                                companies[company_name] = {
-                                    'name': company_name,
-                                    'jobs_count': 1,
-                                    'locations': [job_data.get('location', '')],
-                                    'search_query': search_query
-                                }
-                            elif company_name:
-                                companies[company_name]['jobs_count'] += 1
-                                if job_data.get('location') not in companies[company_name]['locations']:
-                                    companies[company_name]['locations'].append(job_data.get('location', ''))
-                
-                except Exception as e:
-                    logger.error(f"Error processing search result: {e}")
-                    continue
-            
-            # Store in vector database for similarity search
-            for i, job in enumerate(jobs):
-                job_text = f"{job.get('job_title', '')} {job.get('company_name', '')} {job.get('description', '')}"
-                chromadb_service.add_job_posting(
-                    job_id=f"search_{int(time.time())}_{i}",
-                    job_text=job_text,
-                    metadata=job
-                )
-            
-            logger.info(f"Successfully processed {len(jobs)} jobs from {len(companies)} companies")
-            
-            return {
-                "success": True,
-                "message": f"Found {len(jobs)} job postings",
-                "data": {
-                    "jobs": jobs,
-                    "companies": list(companies.values()),
-                    "search_query": search_query,
-                    "total_results": len(jobs)
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in job search: {e}")
-            return {
-                "success": False,
-                "message": f"Search failed: {str(e)}",
-                "data": {"jobs": [], "companies": []}
-            }
-    
-    @staticmethod
-    def get_similar_jobs(user_profile: Dict[str, Any], n_results: int = 5) -> List[Dict[str, Any]]:
-        """Find similar jobs based on user profile."""
-        try:
-            # Create search query from user profile
-            profile_text = f"{user_profile.get('target_position', '')} {' '.join(user_profile.get('skills', []))}"
-            
-            # Search similar jobs in vector database
-            similar_jobs = chromadb_service.search_similar_jobs(profile_text, n_results)
-            
-            return similar_jobs
-            
-        except Exception as e:
-            logger.error(f"Error finding similar jobs: {e}")
-            return []
-
+from SearchAgent import SearchAgent
 
 class Phase2ResumeAgent:
     """Phase 2: Resume generation and optimization agent."""
@@ -612,7 +478,7 @@ class Phase4ScheduleAgent:
 
 
 # Initialize agent instances
-phase1_agent = Phase1SearchAgent()
+search_agent = SearchAgent()
 phase2_agent = Phase2ResumeAgent()
 phase3_agent = Phase3HRAgent()
 phase4_agent = Phase4ScheduleAgent()
