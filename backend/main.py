@@ -8,11 +8,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from config import settings
 from database import init_database
 from api import router
+from admin_api import admin_router
 
 
 @asynccontextmanager
@@ -55,8 +57,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API router
+# Include API routers
 app.include_router(router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
+
+# 创建admin文件夹并挂载静态文件
+os.makedirs("./admin", exist_ok=True)
+app.mount("/admin", StaticFiles(directory="admin", html=True), name="admin")
 
 # Root endpoint
 @app.get("/")
@@ -66,7 +73,9 @@ async def root():
         "message": "Welcome to Job Planner Assistant API",
         "version": "1.0.0",
         "docs_url": "/docs",
-        "health_url": "/api/health"
+        "health_url": "/api/health",
+        "admin_url": "/admin",
+        "frontend_admin_url": "http://localhost:3000/admin"
     }
 
 

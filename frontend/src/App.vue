@@ -68,6 +68,13 @@ export default {
         description: '多Agent讨论，智能时间安排',
         buttonText: '安排面试',
         route: '/phase4'
+      },
+      {
+        id: 5,
+        title: '管理控制台',
+        description: '查看与管理向量数据库中的职位信息',
+        buttonText: '进入管理',
+        route: '/admin'
       }
     ]
     

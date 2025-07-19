@@ -55,13 +55,14 @@ class JobPosting(Base):
     title = Column(String(255), index=True)
     location = Column(String(255))
     description = Column(Text)
-    requirements = Column(JSON)  # List of requirements
-    skills_required = Column(JSON)  # List of skills
+    requirements = Column(JSON)  # List of requirements (stored as JSON)
+    skills_required = Column(JSON)  # List of skills (stored as JSON)
     salary_range = Column(String(100))
     application_url = Column(String(1000))
     source_url = Column(String(1000))
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    search_query = Column(String(255))  # 搜索关键词
 
 
 class Resume(Base):
@@ -147,9 +148,13 @@ class JobPostingCreate(BaseModel):
     description: Optional[str] = None
     requirements: Optional[List[str]] = None
     skills_required: Optional[List[str]] = None
+    skills: Optional[List[str]] = None  # 兼容搜索结果格式
     salary_range: Optional[str] = None
     application_url: Optional[str] = None
     source_url: Optional[str] = None
+    search_query: Optional[str] = None
+    job_title: Optional[str] = None  # 兼容搜索结果中的job_title字段
+    company_name: Optional[str] = None  # 兼容搜索结果中的公司名称
 
 
 class ResumeCreate(BaseModel):
@@ -221,7 +226,24 @@ def get_user(db: Session, user_id: int):
 
 def create_job_posting(db: Session, job: JobPostingCreate):
     """Create a new job posting."""
-    db_job = JobPosting(**job.dict())
+    job_dict = job.dict()
+    
+    # 确保列表类型数据正确存储为JSON
+    if isinstance(job_dict.get("requirements"), str) and job_dict.get("requirements"):
+        try:
+            # 如果是字符串形式的逗号分隔列表，转换回列表
+            job_dict["requirements"] = job_dict["requirements"].split(", ")
+        except:
+            pass
+            
+    if isinstance(job_dict.get("skills_required"), str) and job_dict.get("skills_required"):
+        try:
+            # 如果是字符串形式的逗号分隔列表，转换回列表
+            job_dict["skills_required"] = job_dict["skills_required"].split(", ")
+        except:
+            pass
+    
+    db_job = JobPosting(**job_dict)
     db.add(db_job)
     db.commit()
     db.refresh(db_job)

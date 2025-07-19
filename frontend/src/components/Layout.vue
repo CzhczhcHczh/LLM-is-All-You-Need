@@ -1,7 +1,7 @@
 <template>
   <el-container class="app-container">
-    <!-- Header -->
-    <el-header class="app-header">
+  <!-- Header -->
+  <el-header class="app-header">
       <div class="header-content">
         <h1 class="app-title">
           <el-icon><Briefcase /></el-icon>
@@ -43,6 +43,13 @@
             <el-icon><Calendar /></el-icon>
             <span>Phase 4: 面试安排</span>
           </el-menu-item>
+          
+          <el-divider />
+          
+          <el-menu-item index="/admin">
+            <el-icon><Setting /></el-icon>
+            <span>管理控制台</span>
+          </el-menu-item>
         </el-menu>
         
         <!-- Progress Indicator -->
@@ -71,7 +78,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '../store.js'
-import { Briefcase, Search, Document, User, Calendar } from '@element-plus/icons-vue'
+import { Briefcase, Search, Document, User, Calendar, Setting } from '@element-plus/icons-vue'
 
 export default {
   name: 'Layout',
@@ -80,7 +87,8 @@ export default {
     Search,
     Document,
     User,
-    Calendar
+    Calendar,
+    Setting
   },
   setup() {
     const route = useRoute()

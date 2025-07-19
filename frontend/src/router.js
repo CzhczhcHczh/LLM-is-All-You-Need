@@ -3,6 +3,7 @@ import Phase1 from './components/Phase1.vue'
 import Phase2 from './components/Phase2.vue'
 import Phase3 from './components/Phase3.vue'
 import Phase4 from './components/Phase4.vue'
+import AdminPanel from './components/AdminPanel.vue'
 
 const routes = [
   {
@@ -38,6 +39,12 @@ const routes = [
     name: 'Phase4',
     component: Phase4,
     meta: { title: '面试安排' }
+  },
+  {
+    path: '/admin',
+    name: 'Admin',
+    component: AdminPanel,
+    meta: { title: '管理控制台' }
   }
 ]
 

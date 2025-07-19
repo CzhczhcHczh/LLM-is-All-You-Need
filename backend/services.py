@@ -191,9 +191,25 @@ class ChromaDBService:
             if not self.collection:
                 self._init_collection()
             
+            # 确保所有的metadata值都是基本类型 (str, int, float, bool, None)
+            # ChromaDB不接受列表或字典等复杂类型作为metadata值
+            cleaned_metadata = {}
+            for key, value in metadata.items():
+                if isinstance(value, (str, int, float, bool)) or value is None:
+                    cleaned_metadata[key] = value
+                elif isinstance(value, list):
+                    # 将列表转换为逗号分隔的字符串
+                    cleaned_metadata[key] = ', '.join(map(str, value))
+                elif isinstance(value, dict):
+                    # 将字典转换为JSON字符串
+                    cleaned_metadata[key] = json.dumps(value, ensure_ascii=False)
+                else:
+                    # 对于其他类型，转换为字符串
+                    cleaned_metadata[key] = str(value)
+            
             self.collection.add(
                 documents=[job_text],
-                metadatas=[metadata],
+                metadatas=[cleaned_metadata],
                 ids=[f"job_{job_id}"]
             )
             logger.info(f"Added job posting {job_id} to ChromaDB")
@@ -225,6 +241,112 @@ class ChromaDBService:
         except Exception as e:
             logger.error(f"Error searching similar jobs: {e}")
             return []
+            
+    def get_all_job_embeddings(self, limit: int = 1000) -> List[Dict[str, Any]]:
+        """Get all job embeddings from ChromaDB."""
+        try:
+            if not self.collection:
+                self._init_collection()
+                
+            # 获取所有数据（ChromaDB没有分页API，所以需要一次获取全部）
+            results = self.collection.get()
+            
+            job_embeddings = []
+            for i, doc_id in enumerate(results["ids"]):
+                # 只处理job开头的ID（跳过user类型的）
+                if doc_id.startswith("job_"):
+                    job_embeddings.append({
+                        "id": doc_id,
+                        "document": results["documents"][i],
+                        "metadata": results["metadatas"][i]
+                    })
+                    
+                # 如果达到限制，提前停止
+                if len(job_embeddings) >= limit:
+                    break
+                    
+            return job_embeddings
+            
+        except Exception as e:
+            logger.error(f"Error getting all job embeddings: {e}")
+            return []
+            
+    def get_job_embedding(self, job_id: str) -> Dict[str, Any]:
+        """Get a specific job embedding by ID."""
+        try:
+            if not self.collection:
+                self._init_collection()
+                
+            # ChromaDB的get方法根据ID获取特定文档
+            if not job_id.startswith("job_"):
+                job_id = f"job_{job_id}"
+                
+            results = self.collection.get(ids=[job_id])
+            
+            if not results["ids"]:
+                return None
+                
+            return {
+                "id": results["ids"][0],
+                "document": results["documents"][0],
+                "metadata": results["metadatas"][0]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting job embedding {job_id}: {e}")
+            return None
+            
+    def delete_job_embedding(self, job_id: str) -> bool:
+        """Delete a specific job embedding by ID."""
+        try:
+            if not self.collection:
+                self._init_collection()
+                
+            if not job_id.startswith("job_"):
+                job_id = f"job_{job_id}"
+                
+            self.collection.delete(ids=[job_id])
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting job embedding {job_id}: {e}")
+            return False
+            
+    def get_stats(self) -> Dict[str, Any]:
+        """Get ChromaDB statistics."""
+        try:
+            if not self.collection:
+                self._init_collection()
+                
+            # 获取所有数据
+            results = self.collection.get()
+            
+            # 计算统计信息
+            total_count = len(results["ids"]) if results["ids"] else 0
+            job_count = sum(1 for id in results["ids"] if id.startswith("job_"))
+            user_count = sum(1 for id in results["ids"] if id.startswith("user_"))
+            
+            # 获取最近添加的几个职位
+            recent_jobs = []
+            for i, doc_id in enumerate(results["ids"]):
+                if doc_id.startswith("job_") and len(recent_jobs) < 5:
+                    recent_jobs.append({
+                        "id": doc_id,
+                        "title": results["metadatas"][i].get("job_title", "Unknown"),
+                        "company": results["metadatas"][i].get("company_name", "Unknown"),
+                    })
+            
+            return {
+                "total_embeddings": total_count,
+                "job_embeddings": job_count,
+                "user_embeddings": user_count,
+                "recent_jobs": recent_jobs,
+                "collection_name": self.collection_name
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting ChromaDB stats: {e}")
+            return {"error": str(e)}
     
     def add_user_profile(self, user_id: str, profile_text: str, metadata: Dict[str, Any]):
         """Add user profile to vector database."""

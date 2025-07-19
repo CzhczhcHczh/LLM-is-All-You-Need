@@ -37,6 +37,23 @@ api.interceptors.response.use(
 
 // API functions
 export const apiService = {
+  // ChromaDB Admin APIs
+  getChromaStats() {
+    return api.get('/admin/chroma/stats')
+  },
+  
+  getChromaJobs(params = {}) {
+    return api.get('/admin/chroma/jobs', { params })
+  },
+  
+  getChromaJobDetail(jobId) {
+    return api.get(`/admin/chroma/jobs/${jobId}`)
+  },
+  
+  deleteChromaJob(jobId) {
+    return api.delete(`/admin/chroma/jobs/${jobId}`)
+  },
+  
   // User APIs
   createUser(userData) {
     return api.post('/users', userData)
