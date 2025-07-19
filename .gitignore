@@ -21,3 +21,19 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# 后端缓存文件
+backend/__pycache__/
+backend/**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# ChromaDB 数据文件
+backend/data/chromadb/
+backend/data/chroma/
+**/chromadb/**/*.bin
+**/chroma/**/*.bin
+*.bin
+**/index_metadata.pickle
+**/uuid_to_id.pickle
