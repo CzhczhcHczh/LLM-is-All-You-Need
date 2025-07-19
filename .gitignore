@@ -7,6 +7,10 @@ frontend/.temp/
 frontend/.output/
 frontend/.DS_Store
 
+# 确保任何子目录中的node_modules也被忽略
+**/node_modules/
+**/node_modules/**/*
+
 # Vite/webpack 临时文件
 frontend/**/*.log
 frontend/**/*.tmp
@@ -28,6 +32,7 @@ backend/**/__pycache__/
 **/*.pyc
 **/*.pyo
 **/*.pyd
+**/__pycache__/
 
 # ChromaDB 数据文件
 backend/data/chromadb/
