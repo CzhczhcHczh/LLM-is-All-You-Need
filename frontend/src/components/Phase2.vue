@@ -290,36 +290,78 @@ export default {
         return
       }
       
-      // Get selected job from Phase 1
+      // 尝试获取多个职位
+      const selectedJobsStr = localStorage.getItem('selectedJobs')
       const selectedJobStr = localStorage.getItem('selectedJob')
-      if (!selectedJobStr) {
-        ElMessage.warning('请先在Phase 1中选择一个职位')
+      
+      // 检查是否有职位被选择
+      if (!selectedJobsStr && !selectedJobStr) {
+        ElMessage.warning('请先在Phase 1中选择至少一个职位')
         router.push('/phase1')
         return
       }
       
-      const selectedJob = JSON.parse(selectedJobStr)
+      // 使用多个职位或单个职位
+      let selectedJobs = []
+      if (selectedJobsStr) {
+        selectedJobs = JSON.parse(selectedJobsStr)
+        if (selectedJobs.length === 0) {
+          ElMessage.warning('请先在Phase 1中选择至少一个职位')
+          router.push('/phase1')
+          return
+        }
+      } else if (selectedJobStr) {
+        // 向后兼容，使用单个职位
+        selectedJobs = [JSON.parse(selectedJobStr)]
+      }
       
       store.setResumeLoading(true)
       
       try {
-        const response = await apiService.generateResume({
-          user_profile: userProfile,
-          job_posting: selectedJob
-        })
-        
-        if (response.success) {
-          generatedResume.value = response.data.content
-          store.addResume({
-            id: Date.now(),
-            content: response.data.content,
-            job_title: selectedJob.job_title,
-            company_name: selectedJob.company_name,
-            created_at: new Date().toISOString()
+        // 如果只有一个职位，使用原来的API
+        if (selectedJobs.length === 1) {
+          const selectedJob = selectedJobs[0]
+          const response = await apiService.generateResume({
+            user_profile: userProfile,
+            job_posting: selectedJob
           })
-          ElMessage.success('简历生成成功')
+          
+          if (response.success) {
+            generatedResume.value = response.data.content
+            store.addResume({
+              id: Date.now(),
+              content: response.data.content,
+              job_title: selectedJob.job_title,
+              company_name: selectedJob.company_name,
+              created_at: new Date().toISOString()
+            })
+            ElMessage.success('简历生成成功')
+          } else {
+            ElMessage.error(response.message || '简历生成失败')
+          }
         } else {
-          ElMessage.error(response.message || '简历生成失败')
+          // 如果有多个职位，使用新的API
+          const response = await apiService.generateResumeMultipleJobs({
+            user_profile: userProfile,
+            job_postings: selectedJobs
+          })
+          
+          if (response.success) {
+            // 对于多职位情况，我们可能会返回一个综合简历
+            generatedResume.value = response.data.content
+            store.addResume({
+              id: Date.now(),
+              content: response.data.content,
+              job_title: `多职位简历 (${selectedJobs.length}个)`,
+              company_name: selectedJobs.map(job => job.company_name).join(', '),
+              created_at: new Date().toISOString(),
+              multipleJobs: true,
+              jobsInfo: selectedJobs
+            })
+            ElMessage.success(`基于${selectedJobs.length}个职位生成的简历创建成功`)
+          } else {
+            ElMessage.error(response.message || '多职位简历生成失败')
+          }
         }
       } catch (error) {
         console.error('Resume generation error:', error)

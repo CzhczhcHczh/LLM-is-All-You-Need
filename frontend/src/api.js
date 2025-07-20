@@ -85,6 +85,10 @@ export const apiService = {
     return api.post('/phase2/generate', resumeData)
   },
   
+  generateResumeMultipleJobs(resumeData) {
+    return api.post('/phase2/generate-multi', resumeData)
+  },
+  
   getResumes(userId) {
     return api.get(`/phase2/resumes/${userId}`)
   },

@@ -30,6 +30,10 @@ class SearchRequest(BaseModel):
 class ResumeGenerationRequest(BaseModel):
     user_profile: Dict[str, Any]
     job_posting: Dict[str, Any]
+    
+class MultipleJobsResumeRequest(BaseModel):
+    user_profile: Dict[str, Any]
+    job_postings: List[Dict[str, Any]]
 
 class HRReviewRequest(BaseModel):
     resume_content: Dict[str, Any]
@@ -182,6 +186,40 @@ async def optimize_resume(resume_content: Dict[str, Any], feedback: Dict[str, An
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Resume optimization failed"
+        )
+
+@router.post("/phase2/generate-multi", response_model=BaseResponse)
+async def generate_resume_multiple_jobs(request: MultipleJobsResumeRequest):
+    """Generate a customized resume based on multiple job postings."""
+    try:
+        if not request.job_postings or len(request.job_postings) == 0:
+            raise ValueError("No job postings provided")
+            
+        # 如果只有一个职位，使用原来的方法
+        if len(request.job_postings) == 1:
+            result = phase2_agent.generate_resume(
+                user_profile=request.user_profile,
+                job_posting=request.job_postings[0]
+            )
+        else:
+            # 多职位场景，调用专门的多职位简历生成方法
+            # 注意：您可能需要在phase2_agent中实现这个方法
+            result = phase2_agent.generate_resume_multiple_jobs(
+                user_profile=request.user_profile,
+                job_postings=request.job_postings
+            )
+        
+        return BaseResponse(
+            success=result["success"],
+            message=result["message"],
+            data=result["data"]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating multi-job resume: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Multi-job resume generation failed: {str(e)}"
         )
 
 

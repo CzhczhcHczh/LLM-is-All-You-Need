@@ -18,7 +18,8 @@ export const useAppStore = defineStore('app', {
       jobs: [],
       companies: [],
       loading: false,
-      searchQuery: ''
+      searchQuery: '',
+      selectedJobs: [] // 存储选定的多个职位
     },
     
     // Phase 2 - Resumes
@@ -89,6 +90,23 @@ export const useAppStore = defineStore('app', {
     
     setSearchQuery(query) {
       this.searchResults.searchQuery = query
+    },
+    
+    // 多职位选择相关的方法
+    addSelectedJob(job) {
+      // 检查职位是否已被选择
+      const exists = this.searchResults.selectedJobs.some(item => item.job_title === job.job_title && item.company_name === job.company_name)
+      if (!exists) {
+        this.searchResults.selectedJobs.push(job)
+      }
+    },
+    
+    removeSelectedJob(jobIndex) {
+      this.searchResults.selectedJobs.splice(jobIndex, 1)
+    },
+    
+    clearSelectedJobs() {
+      this.searchResults.selectedJobs = []
     },
     
     // Phase 2 actions

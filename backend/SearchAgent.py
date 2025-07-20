@@ -65,6 +65,7 @@ class SearchAgent:
                 messages=[
                     {"role": "user", "content": prompt}
                 ],
+                timeout=60
                 # response_format={ "type": "json_object" }
             )
 

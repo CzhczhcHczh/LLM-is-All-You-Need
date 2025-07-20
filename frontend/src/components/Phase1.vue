@@ -61,11 +61,33 @@
       <template #header>
         <div class="results-header">
           <h3>搜索结果 ({{ store.searchResults.jobs.length }} 个职位)</h3>
-          <el-button @click="proceedToPhase2" type="primary">
-            进入下一阶段 <el-icon><ArrowRight /></el-icon>
-          </el-button>
+          <div class="selected-jobs-info">
+            <span v-if="store.searchResults.selectedJobs.length > 0" class="selected-count">
+              已选择 {{ store.searchResults.selectedJobs.length }} 个职位
+            </span>
+            <el-button @click="proceedToPhase2" type="primary" :disabled="store.searchResults.selectedJobs.length === 0">
+              进入下一阶段 <el-icon><ArrowRight /></el-icon>
+            </el-button>
+          </div>
         </div>
       </template>
+      
+      <!-- 已选职位列表 -->
+      <div v-if="store.searchResults.selectedJobs.length > 0" class="selected-jobs">
+        <h4>已选择的职位：</h4>
+        <el-tag
+          v-for="(job, index) in store.searchResults.selectedJobs"
+          :key="index"
+          closable
+          @close="removeSelectedJob(index)"
+          class="selected-job-tag"
+        >
+          {{ job.job_title }} - {{ job.company_name }}
+        </el-tag>
+        <div class="selected-jobs-actions">
+          <el-button size="small" type="danger" @click="clearSelectedJobs">清空所选职位</el-button>
+        </div>
+      </div>
 
       <div class="jobs-grid">
         <el-card 
@@ -273,10 +295,20 @@ export default {
     }
     
     const selectJob = (job) => {
-      // Store selected job for next phase
-      localStorage.setItem('selectedJob', JSON.stringify(job))
+      // 将职位添加到选中列表中
+      store.addSelectedJob(job)
       showJobDialog.value = false
       ElMessage.success(`已选择职位：${job.job_title}`)
+    }
+    
+    const removeSelectedJob = (index) => {
+      store.removeSelectedJob(index)
+      ElMessage.info('已移除所选职位')
+    }
+    
+    const clearSelectedJobs = () => {
+      store.clearSelectedJobs()
+      ElMessage.info('已清空所有选择的职位')
     }
     
     const proceedToPhase2 = () => {
@@ -284,6 +316,16 @@ export default {
         ElMessage.warning('请先搜索职位')
         return
       }
+      
+      if (store.searchResults.selectedJobs.length === 0) {
+        ElMessage.warning('请至少选择一个职位')
+        return
+      }
+      
+      // 将选择的多个职位存储到localStorage，保持兼容性
+      localStorage.setItem('selectedJobs', JSON.stringify(store.searchResults.selectedJobs))
+      // 同时保存第一个职位作为默认选择，以兼容现有代码
+      localStorage.setItem('selectedJob', JSON.stringify(store.searchResults.selectedJobs[0]))
       
       store.setCurrentPhase(2)
       router.push('/phase2')
@@ -298,6 +340,8 @@ export default {
       handleDemo,
       viewJobDetails,
       selectJob,
+      removeSelectedJob,
+      clearSelectedJobs,
       proceedToPhase2
     }
   }
@@ -335,6 +379,33 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.selected-jobs-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.selected-count {
+  font-weight: bold;
+  color: #67c23a;
+}
+
+.selected-jobs {
+  background-color: #f8f9fa;
+  padding: 10px 15px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.selected-job-tag {
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+.selected-jobs-actions {
+  margin-top: 10px;
 }
 
 .jobs-grid {
