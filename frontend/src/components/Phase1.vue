@@ -89,9 +89,21 @@
         </div>
       </div>
 
+      <!-- 分页控制 -->
+      <div class="pagination-container">
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :total="store.searchResults.jobs.length"
+          :page-size="pageSize"
+          :current-page="currentPage"
+          @current-change="handlePageChange"
+        />
+      </div>
+
       <div class="jobs-grid">
         <el-card 
-          v-for="(job, index) in store.searchResults.jobs" 
+          v-for="(job, index) in paginatedJobs" 
           :key="index"
           class="job-card"
           shadow="hover"
@@ -107,15 +119,16 @@
           </div>
           
           <div class="job-description">
-            <p>{{ job.description?.substring(0, 150) }}...</p>
+            <p>{{ formatDescription(job.description) }}</p>
           </div>
           
-          <div class="job-skills" v-if="job.skills && job.skills.length > 0">
+          <div class="job-skills" v-if="job.skills">
             <el-tag 
-              v-for="skill in job.skills.slice(0, 3)" 
-              :key="skill"
+              v-for="(skill, idx) in formatSkills(job.skills)" 
+              :key="idx"
               size="small"
               effect="plain"
+              class="skill-tag"
             >
               {{ skill }}
             </el-tag>
@@ -131,6 +144,18 @@
           </div>
         </el-card>
       </div>
+      
+      <!-- 底部分页 -->
+      <div class="pagination-container bottom">
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :total="store.searchResults.jobs.length"
+          :page-size="pageSize"
+          :current-page="currentPage"
+          @current-change="handlePageChange"
+        />
+      </div>
     </el-card>
 
     <!-- Loading State -->
@@ -143,27 +168,27 @@
     </el-card>
 
     <!-- Job Details Dialog -->
-    <el-dialog v-model="showJobDialog" title="职位详情" width="60%">
-      <div v-if="selectedJob">
-        <h3>{{ selectedJob.job_title }}</h3>
-        <p><strong>公司：</strong>{{ selectedJob.company_name }}</p>
-        <p><strong>地点：</strong>{{ selectedJob.location }}</p>
-        <p v-if="selectedJob.salary_range"><strong>薪资：</strong>{{ selectedJob.salary_range }}</p>
+    <el-dialog v-model="showJobDialog" title="职位详情" width="70%">
+      <div v-if="selectedJob" class="job-detail-content">
+        <h3 class="job-detail-title">{{ selectedJob.job_title }}</h3>
+        <p class="job-detail-company"><strong>公司：</strong>{{ selectedJob.company_name }}</p>
+        <p class="job-detail-location"><strong>地点：</strong>{{ selectedJob.location }}</p>
+        <p v-if="selectedJob.salary_range" class="job-detail-salary"><strong>薪资：</strong>{{ selectedJob.salary_range }}</p>
         
         <el-divider>职位描述</el-divider>
-        <p>{{ selectedJob.description }}</p>
+        <p class="job-detail-description">{{ selectedJob.description }}</p>
         
         <el-divider>任职要求</el-divider>
-        <ul v-if="selectedJob.requirements">
-          <li v-for="req in selectedJob.requirements" :key="req">{{ req }}</li>
+        <ul v-if="selectedJob.requirements" class="job-detail-requirements">
+          <li v-for="(req, idx) in formatRequirements(selectedJob.requirements)" :key="idx">{{ req }}</li>
         </ul>
         
         <el-divider>技能要求</el-divider>
-        <div v-if="selectedJob.skills">
+        <div v-if="selectedJob.skills" class="job-detail-skills">
           <el-tag 
-            v-for="skill in selectedJob.skills" 
-            :key="skill"
-            style="margin: 2px;"
+            v-for="(skill, idx) in formatSkills(selectedJob.skills)" 
+            :key="idx"
+            style="margin: 5px;"
           >
             {{ skill }}
           </el-tag>
@@ -179,7 +204,7 @@
 </template>
 
 <script>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Location, Money, ArrowRight, Loading, Promotion } from '@element-plus/icons-vue'
@@ -200,6 +225,44 @@ export default {
     const router = useRouter()
     const store = useAppStore()
     
+    // 添加分页相关变量
+    const currentPage = ref(1)
+    const pageSize = ref(6)  // 修改为每页显示6个职位
+    
+    // 分页后的职位数据
+    const paginatedJobs = computed(() => {
+      const startIndex = (currentPage.value - 1) * pageSize.value
+      const endIndex = startIndex + pageSize.value
+      return store.searchResults.jobs.slice(startIndex, endIndex)
+    })
+    
+    // 处理页码变化
+    const handlePageChange = (page) => {
+      currentPage.value = page
+    }
+    
+    // 格式化职位描述，截断长文本
+    const formatDescription = (description) => {
+      if (!description) return ''
+      return description.length > 150 ? `${description.substring(0, 150)}...` : description
+    }
+    
+    // 格式化技能，处理可能是字符串或数组的情况
+    const formatSkills = (skills) => {
+      if (!skills) return []
+      if (Array.isArray(skills)) return skills
+      if (typeof skills === 'string') return skills.split(',').map(s => s.trim())
+      return []
+    }
+    
+    // 格式化职位要求，处理可能是字符串或数组的情况
+    const formatRequirements = (requirements) => {
+      if (!requirements) return []
+      if (Array.isArray(requirements)) return requirements
+      if (typeof requirements === 'string') return requirements.split(',').map(r => r.trim())
+      return []
+    }
+    
     const searchForm = reactive({
       searchQuery: '',
       location: '',
@@ -215,6 +278,10 @@ export default {
         return
       }
       
+      // 重置分页到第一页
+      currentPage.value = 1
+      
+      // 显示加载状态
       store.setSearchLoading(true)
       store.setSearchQuery(searchForm.searchQuery)
       
@@ -226,14 +293,37 @@ export default {
         })
         
         if (response.success) {
-          store.setSearchResults(response.data)
-          ElMessage.success(`找到 ${response.data.jobs.length} 个职位`)
+          // 验证返回的数据格式
+          if (!response.data || !Array.isArray(response.data.jobs)) {
+            throw new Error('搜索返回的数据格式不正确')
+          }
+          
+          // 处理职位数据中的字段格式
+          const processedJobs = (response.data.jobs || []).map(job => {
+            return {
+              ...job,
+              // 确保这些字段即使是字符串也能被正确处理
+              requirements: formatRequirements(job.requirements),
+              skills: formatSkills(job.skills)
+            }
+          })
+          
+          // 设置处理后的结果
+          store.setSearchResults({
+            jobs: processedJobs,
+            companies: response.data.companies || [],
+            search_query: response.data.search_query
+          })
+          
+          ElMessage.success(`找到 ${processedJobs.length} 个职位`)
         } else {
           ElMessage.error(response.message || '搜索失败')
         }
       } catch (error) {
         console.error('Search error:', error)
-        ElMessage.error('搜索过程中出现错误')
+        ElMessage.error(`搜索过程中出现错误: ${error.message || '未知错误'}`)
+        // 重置搜索结果，避免显示错误数据
+        store.setSearchResults({ jobs: [], companies: [] })
       } finally {
         store.setSearchLoading(false)
       }
@@ -242,6 +332,9 @@ export default {
     const handleDemo = async () => {
       // Demo mode with mock data
       store.setSearchLoading(true)
+      
+      // 重置分页到第一页
+      currentPage.value = 1
       
       // Simulate API delay
       setTimeout(() => {
@@ -342,7 +435,16 @@ export default {
       selectJob,
       removeSelectedJob,
       clearSelectedJobs,
-      proceedToPhase2
+      proceedToPhase2,
+      // 添加分页相关函数和变量
+      currentPage,
+      pageSize,
+      paginatedJobs,
+      handlePageChange,
+      // 添加格式化函数
+      formatDescription,
+      formatSkills,
+      formatRequirements
     }
   }
 }
@@ -408,17 +510,36 @@ export default {
   margin-top: 10px;
 }
 
+/* 分页容器样式 */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0;
+}
+
+.pagination-container.bottom {
+  margin-top: 24px;
+}
+
 .jobs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(450px, 1fr)); /* 增加卡片宽度 */
+  gap: 20px;
   margin-top: 16px;
 }
 
 .job-card {
-  height: 280px;
+  height: 320px; /* 增加卡片高度 */
   display: flex;
   flex-direction: column;
+  border-radius: 8px;
+  transition: all 0.3s;
+  overflow: hidden;
+}
+
+.job-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.1);
 }
 
 .job-header {
@@ -433,6 +554,7 @@ export default {
   color: #303133;
   flex: 1;
   margin-right: 8px;
+  font-size: 18px; /* 增加标题大小 */
 }
 
 .job-details {
@@ -451,26 +573,63 @@ export default {
 .job-description {
   flex: 1;
   margin-bottom: 12px;
+  overflow: hidden;
 }
 
 .job-description p {
   color: #666;
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.6; /* 增加行高 */
 }
 
 .job-skills {
   margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
 }
 
-.job-skills .el-tag {
-  margin-right: 4px;
-  margin-bottom: 4px;
+.skill-tag {
+  margin-right: 5px;
+  margin-bottom: 5px;
 }
 
 .job-actions {
   display: flex;
   gap: 8px;
+  margin-top: auto; /* 保证按钮在底部 */
+  padding-top: 10px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 职位详情样式 */
+.job-detail-content {
+  padding: 10px;
+}
+
+.job-detail-title {
+  font-size: 22px;
+  color: #303133;
+  margin-bottom: 15px;
+}
+
+.job-detail-company,
+.job-detail-location,
+.job-detail-salary {
+  margin: 8px 0;
+}
+
+.job-detail-description {
+  white-space: pre-line; /* 保留换行符 */
+  line-height: 1.6;
+}
+
+.job-detail-requirements li {
+  margin: 5px 0;
+}
+
+.job-detail-skills {
+  display: flex;
+  flex-wrap: wrap;
 }
 
 .loading-card {
@@ -500,6 +659,10 @@ export default {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.el-pagination {
+  display: inline-block;
 }
 </style>
 

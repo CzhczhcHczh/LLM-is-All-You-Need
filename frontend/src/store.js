@@ -80,6 +80,9 @@ export const useAppStore = defineStore('app', {
     
     // Phase 1 actions
     setSearchResults(results) {
+      // 清空选择的职位
+      this.searchResults.selectedJobs = []
+      // 重新设置搜索结果
       this.searchResults.jobs = results.jobs || []
       this.searchResults.companies = results.companies || []
     },

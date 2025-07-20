@@ -41,7 +41,7 @@ class SearchAgent:
         logger.info(f"Starting GPT-4o web search for: {search_query}")
         
         # 限制每次查询的职位数量为5条
-        batch_size = 5
+        batch_size = 10
         # 计算需要进行的查询次数
         num_batches = (max_results + batch_size - 1) // batch_size
         

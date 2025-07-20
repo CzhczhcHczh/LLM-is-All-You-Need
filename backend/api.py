@@ -107,11 +107,28 @@ async def get_user_endpoint(user_id: int, db: Session = Depends(get_db)):
 async def search_jobs(request: SearchRequest):
     """Search for job postings."""
     try:
+        logger.info(f"Starting job search for query: '{request.search_query}', location: '{request.location}', max_results: {request.max_results}")
+        
         result = search_agent.search_jobs(
             search_query=request.search_query,
             location=request.location,
             max_results=request.max_results
         )
+        
+        if not result["success"]:
+            logger.warning(f"Search was unsuccessful: {result['message']}")
+            
+        logger.info(f"Search completed: found {len(result['data'].get('jobs', []))} jobs")
+        
+        # 确保返回数据格式一致性
+        if "data" not in result or not isinstance(result["data"], dict):
+            result["data"] = {"jobs": [], "companies": [], "search_query": request.search_query}
+            
+        if "jobs" not in result["data"]:
+            result["data"]["jobs"] = []
+            
+        if "companies" not in result["data"]:
+            result["data"]["companies"] = []
         
         return BaseResponse(
             success=result["success"],
@@ -120,10 +137,10 @@ async def search_jobs(request: SearchRequest):
         )
         
     except Exception as e:
-        logger.error(f"Error in job search: {e}")
+        logger.error(f"Error in job search: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Job search failed"
+            detail=f"Job search failed: {str(e)}"
         )
 
 @router.post("/phase1/similar", response_model=BaseResponse)
