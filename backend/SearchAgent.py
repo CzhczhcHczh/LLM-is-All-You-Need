@@ -176,4 +176,3 @@ if __name__ == "__main__":
 
     agent = SearchAgent()
     print(agent.search_jobs("Python Developer", "Beijing", 10))
-

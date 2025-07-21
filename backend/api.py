@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from loguru import logger
+import time
 
 from database import get_db, create_user, get_user, UserCreate
 from agents import search_agent, phase2_agent, phase3_agent, phase4_agent
@@ -27,18 +28,74 @@ class SearchRequest(BaseModel):
     location: Optional[str] = None
     max_results: int = 20
 
-class ResumeGenerationRequest(BaseModel):
-    user_profile: Dict[str, Any]
-    job_posting: Dict[str, Any]
+class EnhancedUserProfile(BaseModel):
+    """增强的用户个人资料模型"""
+    # 基本信息
+    full_name: str
+    email: str
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    target_position: Optional[str] = None
     
-class MultipleJobsResumeRequest(BaseModel):
-    user_profile: Dict[str, Any]
-    job_postings: List[Dict[str, Any]]
+    # 个人简介
+    summary: Optional[str] = None
+    
+    # 技能
+    skills: List[str] = []
+    
+    # 工作经验
+    experience: List[Dict[str, Any]] = []
+    
+    # 教育背景
+    education: List[Dict[str, Any]] = []
+    
+    # 项目经验
+    projects: List[Dict[str, Any]] = []
+    
+    # 其他信息
+    languages: Optional[str] = None
+    certifications: Optional[str] = None
+    special_requirements: Optional[str] = None
+    
+    # 新增字段
+    career_objective: Optional[str] = None  # 职业目标
+    years_of_experience: Optional[int] = None  # 工作年限
+    salary_expectation: Optional[str] = None  # 期望薪资
+    availability: Optional[str] = None  # 到岗时间
+    preferred_work_type: Optional[str] = None  # 工作类型偏好（远程/现场/混合）
+
+class EnhancedJobPosting(BaseModel):
+    """增强的职位信息模型"""
+    job_title: str
+    company_name: str
+    location: Optional[str] = None
+    salary_range: Optional[str] = None
+    requirements: List[str] = []
+    skills: List[str] = []
+    description: Optional[str] = None
+    source_url: Optional[str] = None
+    
+    # 新增字段
+    company_size: Optional[str] = None  # 公司规模
+    industry: Optional[str] = None  # 行业
+    company_culture: Optional[str] = None  # 公司文化
+    benefits: List[str] = []  # 福利待遇
+    work_type: Optional[str] = None  # 工作类型
+    experience_level: Optional[str] = None  # 经验要求
+    education_requirement: Optional[str] = None  # 学历要求
+
+class ResumeGenerationRequest(BaseModel):
+    user_profile: EnhancedUserProfile
+    job_posting: EnhancedJobPosting
+    customization_level: Optional[str] = "high"  # 定制化程度: low, medium, high
+    focus_areas: List[str] = []  # 重点突出领域
+    template_style: Optional[str] = "professional"  # 模板风格
 
 class HRReviewRequest(BaseModel):
     resume_content: Dict[str, Any]
-    job_posting: Dict[str, Any]
+    job_posting: EnhancedJobPosting
     hr_persona: str = "experienced"
+    review_depth: Optional[str] = "detailed"  # 评估深度
 
 class SchedulingRequest(BaseModel):
     interviews: List[Dict[str, Any]]
@@ -108,13 +165,11 @@ async def search_jobs(request: SearchRequest):
     """Search for job postings."""
     try:
         logger.info(f"Starting job search for query: '{request.search_query}', location: '{request.location}', max_results: {request.max_results}")
-        
         result = search_agent.search_jobs(
             search_query=request.search_query,
             location=request.location,
             max_results=request.max_results
         )
-        
         if not result["success"]:
             logger.warning(f"Search was unsuccessful: {result['message']}")
             
@@ -147,7 +202,7 @@ async def search_jobs(request: SearchRequest):
 async def find_similar_jobs(user_profile: Dict[str, Any], n_results: int = 5):
     """Find similar jobs based on user profile."""
     try:
-        similar_jobs = search_agent.get_similar_jobs(user_profile, n_results)
+        similar_jobs = search_agent.search_jobs(user_profile, n_results)
         
         return BaseResponse(
             success=True,
@@ -166,77 +221,103 @@ async def find_similar_jobs(user_profile: Dict[str, Any], n_results: int = 5):
 # Phase 2 APIs - Resume Generation
 @router.post("/phase2/generate", response_model=BaseResponse)
 async def generate_resume(request: ResumeGenerationRequest):
-    """Generate a customized resume."""
+    """生成个性化简历"""
     try:
-        result = phase2_agent.generate_resume(
-            user_profile=request.user_profile,
-            job_posting=request.job_posting
+        logger.info(f"Generating resume for {request.user_profile.full_name} - {request.job_posting.job_title}")
+        
+        # 转换为字典格式
+        user_profile_dict = request.user_profile.dict()
+        job_posting_dict = request.job_posting.dict()
+        
+        # 添加额外的定制化参数
+        generation_params = {
+            "customization_level": request.customization_level,
+            "focus_areas": request.focus_areas,
+            "template_style": request.template_style
+        }
+        
+        # 调用增强的简历生成Agent
+        result = phase2_agent.generate_enhanced_resume(
+            user_profile_dict, 
+            job_posting_dict,
+            generation_params
         )
         
-        return BaseResponse(
-            success=result["success"],
-            message=result["message"],
-            data=result["data"]
-        )
-        
+        if result["success"]:
+            return BaseResponse(
+                success=True,
+                message="个性化简历生成成功",
+                data=result["data"]
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("message", "简历生成失败")
+            )
+            
     except Exception as e:
-        logger.error(f"Error generating resume: {e}")
+        logger.error(f"Error in resume generation: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Resume generation failed"
+            status_code=500,
+            detail=f"简历生成失败: {str(e)}"
         )
 
 @router.post("/phase2/optimize", response_model=BaseResponse)
-async def optimize_resume(resume_content: Dict[str, Any], feedback: Dict[str, Any]):
-    """Optimize resume based on feedback."""
+async def optimize_resume(
+    resume_content: Dict[str, Any], 
+    feedback: Dict[str, Any],
+    optimization_focus: Optional[List[str]] = None
+):
+    """优化简历内容"""
     try:
-        result = phase2_agent.optimize_resume(resume_content, feedback)
+        result = phase2_agent.optimize_resume_content(
+            resume_content, 
+            feedback, 
+            optimization_focus or []
+        )
         
         return BaseResponse(
-            success=result["success"],
-            message=result["message"],
-            data=result["data"]
+            success=True,
+            message="简历优化完成",
+            data=result
         )
         
     except Exception as e:
         logger.error(f"Error optimizing resume: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Resume optimization failed"
+            status_code=500,
+            detail=f"简历优化失败: {str(e)}"
         )
 
-@router.post("/phase2/generate-multi", response_model=BaseResponse)
-async def generate_resume_multiple_jobs(request: MultipleJobsResumeRequest):
-    """Generate a customized resume based on multiple job postings."""
+@router.post("/phase2/analyze-match", response_model=BaseResponse)
+async def analyze_job_match(request: dict):
+    """分析用户与职位的匹配度"""
     try:
-        if not request.job_postings or len(request.job_postings) == 0:
-            raise ValueError("No job postings provided")
-            
-        # 如果只有一个职位，使用原来的方法
-        if len(request.job_postings) == 1:
-            result = phase2_agent.generate_resume(
-                user_profile=request.user_profile,
-                job_posting=request.job_postings[0]
-            )
-        else:
-            # 多职位场景，调用专门的多职位简历生成方法
-            # 注意：您可能需要在phase2_agent中实现这个方法
-            result = phase2_agent.generate_resume_multiple_jobs(
-                user_profile=request.user_profile,
-                job_postings=request.job_postings
+        user_profile = request.get("user_profile")
+        job_posting = request.get("job_posting")
+        
+        if not user_profile or not job_posting:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing user_profile or job_posting"
             )
         
+        result = phase2_agent.analyze_job_user_match(
+            user_profile,
+            job_posting
+        )
+        
         return BaseResponse(
-            success=result["success"],
-            message=result["message"],
-            data=result["data"]
+            success=True,
+            message="匹配度分析完成",
+            data=result
         )
         
     except Exception as e:
-        logger.error(f"Error generating multi-job resume: {e}")
+        logger.error(f"Error analyzing job match: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Multi-job resume generation failed: {str(e)}"
+            status_code=500,
+            detail=f"匹配度分析失败: {str(e)}"
         )
 
 
@@ -342,11 +423,14 @@ async def optimize_schedule(request: SchedulingRequest):
 # Health check and utility APIs
 @router.get("/health", response_model=BaseResponse)
 async def health_check():
-    """Health check endpoint."""
+    """健康检查"""
     return BaseResponse(
         success=True,
-        message="API is healthy",
-        data={"status": "ok", "version": "1.0.0"}
+        message="API服务正常运行",
+        data={
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat()
+        }
     )
 
 @router.get("/models", response_model=BaseResponse)
@@ -392,7 +476,11 @@ async def demo_full_workflow(
         # Phase 2: Generate resume for first job
         logger.info("Demo: Starting Phase 2 - Resume Generation")
         first_job = search_result["data"]["jobs"][0]
-        resume_result = phase2_agent.generate_resume(user_profile, first_job)
+        resume_result = phase2_agent.generate_enhanced_resume(
+            user_profile, 
+            first_job, 
+            {}  # generation_params
+        )
         workflow_results["phase2"] = resume_result
         
         if not resume_result["success"]:
@@ -439,5 +527,70 @@ async def demo_full_workflow(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Demo workflow failed"
+        )
+
+# 在 api.py 中添加批量生成接口
+@router.post("/phase2/generate-batch", response_model=BaseResponse)
+async def generate_batch_resumes(request: dict):
+    """批量生成多份简历"""
+    try:
+        user_profile = request.get("user_profile")
+        job_postings = request.get("job_postings", [])
+        
+        if not user_profile or not job_postings:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing user_profile or job_postings"
+            )
+        
+        results = []
+        
+        for i, job_posting in enumerate(job_postings):
+            try:
+                logger.info(f"Generating resume {i+1}/{len(job_postings)} for {job_posting.get('company_name', 'Unknown')}")
+                
+                result = phase2_agent.generate_enhanced_resume(
+                    user_profile, 
+                    job_posting,
+                    {}
+                )
+                
+                results.append({
+                    "job_index": i,
+                    "job_title": job_posting.get("job_title"),
+                    "company_name": job_posting.get("company_name"),
+                    "success": result["success"],
+                    "data": result["data"] if result["success"] else None,
+                    "error": result.get("message") if not result["success"] else None
+                })
+                
+            except Exception as e:
+                logger.error(f"Error generating resume for job {i}: {e}")
+                results.append({
+                    "job_index": i,
+                    "job_title": job_posting.get("job_title"),
+                    "company_name": job_posting.get("company_name"),
+                    "success": False,
+                    "error": str(e)
+                })
+        
+        success_count = sum(1 for r in results if r["success"])
+        
+        return BaseResponse(
+            success=True,
+            message=f"批量生成完成，成功 {success_count}/{len(job_postings)} 份简历",
+            data={
+                "results": results,
+                "total_jobs": len(job_postings),
+                "success_count": success_count,
+                "batch_id": f"batch_{int(time.time())}"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in batch resume generation: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"批量生成简历失败: {str(e)}"
         )
 

@@ -3,7 +3,7 @@ import axios from 'axios'
 // Create axios instance
 const api = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -80,15 +80,38 @@ export const apiService = {
     return api.get(`/phase1/jobs/${jobId}`)
   },
   
-  // Phase 2 - Resume APIs
+  // Phase 2 - Resume APIs (增强版本)
   generateResume(resumeData) {
-    return api.post('/phase2/generate', resumeData)
+    return api.post('/phase2/generate', resumeData,{
+      timeout: 90000
+    })
   },
   
-  generateResumeMultipleJobs(resumeData) {
-    return api.post('/phase2/generate-multi', resumeData)
+  // 批量生成简历
+  generateBatchResumes(userData) {
+    return api.post('/phase2/generate-batch', userData,{
+      timeout: 90000
+    })
   },
   
+  // 分析匹配度
+  analyzeJobMatch(userProfile, jobPosting) {
+    return api.post('/phase2/analyze-match', {
+      user_profile: userProfile,
+      job_posting: jobPosting
+    })
+  },
+  
+  // 优化简历
+  optimizeResume(resumeContent, feedback, optimizationFocus = []) {
+    return api.post('/phase2/optimize', {
+      resume_content: resumeContent,
+      feedback: feedback,
+      optimization_focus: optimizationFocus
+    })
+  },
+  
+  // 原有的简历相关API
   getResumes(userId) {
     return api.get(`/phase2/resumes/${userId}`)
   },
@@ -133,6 +156,16 @@ export const apiService = {
   
   approveSchedule(scheduleId) {
     return api.post(`/phase4/schedule/${scheduleId}/approve`)
+  },
+  
+  // 新增：健康检查API
+  healthCheck() {
+    return api.get('/health')
+  },
+  
+  // 新增：获取可用模型列表
+  getAvailableModels() {
+    return api.get('/models')
   }
 }
 

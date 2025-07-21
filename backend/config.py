@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     @property
     def phase4_models_list(self) -> List[str]:
         """Get Phase 4 models as a list."""
-        return [model.strip() for model in self.phase4_models.split(",")]
-    
+        return [model.strip() for model in str(self.phase4_models).split(",")]
+    # 你可以在这里添加更多的属性或方法来扩展配置功能    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -22,11 +22,14 @@ export const useAppStore = defineStore('app', {
       selectedJobs: [] // 存储选定的多个职位
     },
     
-    // Phase 2 - Resumes
+    // Phase 2 - Resumes (增强)
     resumes: {
       list: [],
       current: null,
-      loading: false
+      loading: false,
+      multipleResumes: {}, // 存储多个职位对应的简历 {jobIndex: resumeData}
+      batchGenerating: false,
+      generationProgress: 0
     },
     
     // Phase 3 - HR Feedback
@@ -129,6 +132,37 @@ export const useAppStore = defineStore('app', {
       this.resumes.loading = loading
     },
     
+    // Phase 2 - 多简历管理 actions
+    setMultipleResumes(resumes) {
+      this.resumes.multipleResumes = resumes
+    },
+    
+    addMultipleResume(jobIndex, resume) {
+      this.resumes.multipleResumes[jobIndex] = resume
+    },
+    
+    updateMultipleResume(jobIndex, resume) {
+      if (this.resumes.multipleResumes[jobIndex]) {
+        this.resumes.multipleResumes[jobIndex] = resume
+      }
+    },
+    
+    removeMultipleResume(jobIndex) {
+      delete this.resumes.multipleResumes[jobIndex]
+    },
+    
+    setBatchGenerating(loading) {
+      this.resumes.batchGenerating = loading
+    },
+    
+    setGenerationProgress(progress) {
+      this.resumes.generationProgress = progress
+    },
+    
+    clearMultipleResumes() {
+      this.resumes.multipleResumes = {}
+    },
+    
     // Phase 3 actions
     setHRFeedback(feedback) {
       this.hrFeedback.list = feedback
@@ -181,4 +215,3 @@ export const useAppStore = defineStore('app', {
     }
   }
 })
-

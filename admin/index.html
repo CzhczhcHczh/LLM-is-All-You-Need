@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>求职规划助手 - 管理控制台</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            background-color: #343a40;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            background-color: #f1f5f9;
+            font-weight: 600;
+        }
+        .stats-card {
+            text-align: center;
+            background-color: #fff;
+        }
+        .stats-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #0d6efd;
+        }
+        .stats-card .label {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        pre.json {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        .job-card {
+            transition: transform 0.2s;
+        }
+        .job-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .badge-salary {
+            background-color: #28a745;
+            color: white;
+        }
+        .badge-company {
+            background-color: #6610f2;
+            color: white;
+        }
+        .badge-location {
+            background-color: #fd7e14;
+            color: white;
+        }
+        .search-form {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="#">求职规划助手管理控制台</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" id="nav-dashboard">数据统计</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="nav-jobs">职位数据</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <div class="container">
+        <!-- 统计信息卡片行 -->
+        <div id="dashboard-section">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h2>ChromaDB 数据统计</h2>
+                    <p class="text-muted">向量数据库中存储的职位和用户数据概览</p>
+                </div>
+            </div>
+            
+            <div class="row" id="stats-row">
+                <!-- 统计信息卡片将在这里动态加载 -->
+                <div class="col-12 loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>加载统计信息...</p>
+                </div>
+            </div>
+            
+            <div class="row mt-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">最近添加的职位</div>
+                        <div class="card-body" id="recent-jobs">
+                            <p class="loading text-center">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                加载中...
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">系统信息</div>
+                        <div class="card-body">
+                            <p><strong>数据库名称:</strong> <span id="collection-name">加载中...</span></p>
+                            <p><strong>数据存储路径:</strong> ./data/chromadb</p>
+                            <p><strong>API 版本:</strong> 1.0.0</p>
+                            <p><strong>服务器时间:</strong> <span id="server-time"></span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 职位数据部分 -->
+        <div id="jobs-section" style="display: none;">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h2>职位数据</h2>
+                    <p class="text-muted">ChromaDB中存储的职位嵌入向量数据</p>
+                </div>
+            </div>
+            
+            <!-- 搜索表单 -->
+            <div class="search-form mb-4">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-8">
+                        <input type="text" class="form-control" id="search-query" placeholder="输入职位、公司、技能等关键词搜索...">
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select" id="limit-select">
+                            <option value="10">10条/页</option>
+                            <option value="20" selected>20条/页</option>
+                            <option value="50">50条/页</option>
+                            <option value="100">100条/页</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-primary w-100" id="search-btn">搜索</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 职位列表 -->
+            <div class="row" id="jobs-list">
+                <!-- 职位卡片将在这里动态加载 -->
+                <div class="col-12 loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>加载职位数据...</p>
+                </div>
+            </div>
+            
+            <!-- 分页控件 -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination justify-content-center" id="pagination">
+                            <!-- 分页按钮将在这里动态加载 -->
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 职位详情模态框 -->
+    <div class="modal fade" id="job-detail-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-title">职位详情</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="job-detail-content">
+                        <!-- 职位详情将在这里动态加载 -->
+                    </div>
+                    <h5 class="mt-4">元数据</h5>
+                    <pre class="json" id="job-metadata"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" id="delete-job-btn">删除</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局变量
+        let currentPage = 1;
+        let itemsPerPage = 20;
+        let totalItems = 0;
+        let currentQuery = '';
+        let currentJobId = '';
+        
+        // DOM加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 更新服务器时间
+            updateServerTime();
+            setInterval(updateServerTime, 1000);
+            
+            // 加载初始数据
+            loadDashboardData();
+            
+            // 导航切换事件
+            document.getElementById('nav-dashboard').addEventListener('click', function(e) {
+                e.preventDefault();
+                showSection('dashboard');
+            });
+            
+            document.getElementById('nav-jobs').addEventListener('click', function(e) {
+                e.preventDefault();
+                showSection('jobs');
+                loadJobsData();
+            });
+            
+            // 搜索按钮点击事件
+            document.getElementById('search-btn').addEventListener('click', function() {
+                currentQuery = document.getElementById('search-query').value;
+                itemsPerPage = parseInt(document.getElementById('limit-select').value);
+                currentPage = 1;
+                loadJobsData();
+            });
+            
+            // 删除职位按钮点击事件
+            document.getElementById('delete-job-btn').addEventListener('click', function() {
+                if (currentJobId) {
+                    deleteJob(currentJobId);
+                }
+            });
+        });
+        
+        // 显示指定部分
+        function showSection(section) {
+            document.getElementById('dashboard-section').style.display = section === 'dashboard' ? 'block' : 'none';
+            document.getElementById('jobs-section').style.display = section === 'jobs' ? 'block' : 'none';
+            
+            document.getElementById('nav-dashboard').classList.toggle('active', section === 'dashboard');
+            document.getElementById('nav-jobs').classList.toggle('active', section === 'jobs');
+        }
+        
+        // 更新服务器时间
+        function updateServerTime() {
+            const now = new Date();
+            document.getElementById('server-time').textContent = now.toLocaleString();
+        }
+        
+        // 加载仪表盘数据
+        function loadDashboardData() {
+            fetch('/api/admin/chroma/stats')
+                .then(response => response.json())
+                .then(data => {
+                    // 更新统计卡片
+                    const statsRow = document.getElementById('stats-row');
+                    statsRow.innerHTML = `
+                        <div class="col-md-4 mb-4">
+                            <div class="card stats-card">
+                                <div class="card-body">
+                                    <div class="value">${data.job_embeddings}</div>
+                                    <div class="label">职位嵌入向量</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-4">
+                            <div class="card stats-card">
+                                <div class="card-body">
+                                    <div class="value">${data.user_embeddings}</div>
+                                    <div class="label">用户嵌入向量</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-4">
+                            <div class="card stats-card">
+                                <div class="card-body">
+                                    <div class="value">${data.total_embeddings}</div>
+                                    <div class="label">总嵌入向量</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // 更新最近添加的职位
+                    const recentJobs = document.getElementById('recent-jobs');
+                    if (data.recent_jobs && data.recent_jobs.length > 0) {
+                        let jobsHtml = `<ul class="list-group list-group-flush">`;
+                        data.recent_jobs.forEach(job => {
+                            jobsHtml += `
+                                <li class="list-group-item">
+                                    <strong>${job.title}</strong> - 
+                                    <span class="text-muted">${job.company}</span>
+                                    <button class="btn btn-sm btn-outline-primary float-end" 
+                                            onclick="viewJobDetail('${job.id}')">查看</button>
+                                </li>
+                            `;
+                        });
+                        jobsHtml += `</ul>`;
+                        recentJobs.innerHTML = jobsHtml;
+                    } else {
+                        recentJobs.innerHTML = `<p class="text-center">暂无职位数据</p>`;
+                    }
+                    
+                    // 更新系统信息
+                    document.getElementById('collection-name').textContent = data.collection_name;
+                })
+                .catch(error => {
+                    console.error('Error loading dashboard data:', error);
+                    document.getElementById('stats-row').innerHTML = `
+                        <div class="col-12">
+                            <div class="alert alert-danger">
+                                加载数据失败: ${error.message}
+                            </div>
+                        </div>
+                    `;
+                });
+        }
+        
+        // 加载职位数据
+        function loadJobsData() {
+            const jobsList = document.getElementById('jobs-list');
+            jobsList.innerHTML = `
+                <div class="col-12 loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>加载职位数据...</p>
+                </div>
+            `;
+            
+            const offset = (currentPage - 1) * itemsPerPage;
+            let url = `/api/admin/chroma/jobs?limit=${itemsPerPage}&offset=${offset}`;
+            
+            if (currentQuery) {
+                url += `&query=${encodeURIComponent(currentQuery)}`;
+            }
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    totalItems = data.total;
+                    
+                    if (data.results.length === 0) {
+                        jobsList.innerHTML = `
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    没有找到职位数据。${currentQuery ? '请尝试其他搜索词。' : ''}
+                                </div>
+                            </div>
+                        `;
+                        document.getElementById('pagination').innerHTML = '';
+                        return;
+                    }
+                    
+                    let jobsHtml = '';
+                    data.results.forEach(job => {
+                        const metadata = job.metadata || {};
+                        jobsHtml += `
+                            <div class="col-md-6 mb-4">
+                                <div class="card job-card h-100">
+                                    <div class="card-body">
+                                        <h5 class="card-title">${metadata.job_title || '未知职位'}</h5>
+                                        <h6 class="card-subtitle mb-2 text-muted">${metadata.company_name || '未知公司'}</h6>
+                                        
+                                        <div class="mb-2">
+                                            <span class="badge badge-location">${metadata.location || '未知地点'}</span>
+                                            ${metadata.salary_range ? `<span class="badge badge-salary">${metadata.salary_range}</span>` : ''}
+                                        </div>
+                                        
+                                        <p class="card-text text-truncate">${metadata.description || '无描述'}</p>
+                                    </div>
+                                    <div class="card-footer bg-white">
+                                        <button class="btn btn-sm btn-primary" onclick="viewJobDetail('${job.id}')">
+                                            查看详情
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    jobsList.innerHTML = jobsHtml;
+                    
+                    // 更新分页
+                    updatePagination();
+                })
+                .catch(error => {
+                    console.error('Error loading jobs data:', error);
+                    jobsList.innerHTML = `
+                        <div class="col-12">
+                            <div class="alert alert-danger">
+                                加载数据失败: ${error.message}
+                            </div>
+                        </div>
+                    `;
+                });
+        }
+        
+        // 更新分页控件
+        function updatePagination() {
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+            const paginationEl = document.getElementById('pagination');
+            
+            if (totalPages <= 1) {
+                paginationEl.innerHTML = '';
+                return;
+            }
+            
+            let paginationHtml = `
+                <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">上一页</a>
+                </li>
+            `;
+            
+            // 显示当前页前后2页
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, currentPage + 2);
+            
+            if (startPage > 1) {
+                paginationHtml += `
+                    <li class="page-item">
+                        <a class="page-link" href="#" onclick="changePage(1)">1</a>
+                    </li>
+                `;
+                
+                if (startPage > 2) {
+                    paginationHtml += `
+                        <li class="page-item disabled">
+                            <a class="page-link" href="#">...</a>
+                        </li>
+                    `;
+                }
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHtml += `
+                    <li class="page-item ${i === currentPage ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
+                    </li>
+                `;
+            }
+            
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    paginationHtml += `
+                        <li class="page-item disabled">
+                            <a class="page-link" href="#">...</a>
+                        </li>
+                    `;
+                }
+                
+                paginationHtml += `
+                    <li class="page-item">
+                        <a class="page-link" href="#" onclick="changePage(${totalPages})">${totalPages}</a>
+                    </li>
+                `;
+            }
+            
+            paginationHtml += `
+                <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">下一页</a>
+                </li>
+            `;
+            
+            paginationEl.innerHTML = paginationHtml;
+        }
+        
+        // 切换页码
+        function changePage(page) {
+            if (page < 1 || page > Math.ceil(totalItems / itemsPerPage)) {
+                return;
+            }
+            
+            currentPage = page;
+            loadJobsData();
+        }
+        
+        // 查看职位详情
+        function viewJobDetail(jobId) {
+            currentJobId = jobId;
+            
+            const detailContent = document.getElementById('job-detail-content');
+            const metadataContent = document.getElementById('job-metadata');
+            
+            detailContent.innerHTML = `
+                <div class="text-center my-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>加载职位详情...</p>
+                </div>
+            `;
+            metadataContent.innerHTML = '';
+            
+            fetch(`/api/admin/chroma/jobs/${jobId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const metadata = data.metadata || {};
+                    
+                    // 更新模态框标题
+                    document.getElementById('modal-title').textContent = metadata.job_title || '职位详情';
+                    
+                    // 更新职位详情
+                    detailContent.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-8">
+                                <h4>${metadata.job_title || '未知职位'}</h4>
+                                <h5 class="text-muted">${metadata.company_name || '未知公司'}</h5>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <span class="badge bg-primary">${metadata.salary_range || '薪资未知'}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <p><strong>工作地点:</strong> ${metadata.location || '未知'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>来源:</strong> <a href="${metadata.source_url || '#'}" target="_blank">原始链接</a></p>
+                            </div>
+                        </div>
+                        
+                        <h5 class="mt-4">职位描述</h5>
+                        <p>${metadata.description || '无描述'}</p>
+                        
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <h5>技能要求</h5>
+                                <ul>
+                                    ${(metadata.skills || '').split(',').map(skill => `<li>${skill.trim()}</li>`).join('')}
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h5>职位要求</h5>
+                                <ul>
+                                    ${(metadata.requirements || '').split(',').map(req => `<li>${req.trim()}</li>`).join('')}
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <h5 class="mt-4">向量嵌入文本</h5>
+                        <div class="card">
+                            <div class="card-body">
+                                <p>${data.document || '无数据'}</p>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // 更新元数据JSON
+                    metadataContent.textContent = JSON.stringify(metadata, null, 2);
+                    
+                    // 显示模态框
+                    new bootstrap.Modal(document.getElementById('job-detail-modal')).show();
+                })
+                .catch(error => {
+                    console.error('Error loading job detail:', error);
+                    detailContent.innerHTML = `
+                        <div class="alert alert-danger">
+                            加载职位详情失败: ${error.message}
+                        </div>
+                    `;
+                });
+        }
+        
+        // 删除职位
+        function deleteJob(jobId) {
+            if (!confirm('确定要删除此职位吗？此操作不可恢复。')) {
+                return;
+            }
+            
+            fetch(`/api/admin/chroma/jobs/${jobId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 关闭模态框
+                    bootstrap.Modal.getInstance(document.getElementById('job-detail-modal')).hide();
+                    
+                    // 重新加载数据
+                    loadJobsData();
+                    loadDashboardData();
+                    
+                    alert('职位已成功删除');
+                } else {
+                    alert(`删除失败: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting job:', error);
+                alert(`删除失败: ${error.message}`);
+            });
+        }
+    </script>
+</body>
+</html>
