@@ -26,11 +26,8 @@ import re
 from services import chromadb_service
 
 client = OpenAI(
-        # defaults to os.environ.get("OPENAI_API_KEY")
-        # api_key="sk-t54PdgqlpcLAjZlEVrVWg0wPCXgei5xPNGmWq6PyqKSvr6W0",
         api_key="sk-Z43OD6lBJ88hB6QgAGdKdSpBxg1A892PNzj9PAw8bar6DYdc",
         base_url="https://api.chatanywhere.tech/v1"
-        # base_url="https://api.chatanywhere.org/v1"
     )
 
 class SearchAgent:

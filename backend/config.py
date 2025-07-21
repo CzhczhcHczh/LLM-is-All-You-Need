@@ -6,17 +6,18 @@ import os
 from typing import List
 from pydantic import Field
 from pydantic_settings import BaseSettings
-
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file if it exists
 
 class Settings(BaseSettings):
     """Application settings."""
-    
     # Database
     database_url: str = Field(default="sqlite:///./data/database.db", env="DATABASE_URL")
     
     # API Keys
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY", description="OpenAI API key")
     openai_api_base: str = Field(default="https://api.openai.com/v1", env="OPENAI_API_BASE", description="OpenAI API base URL")
+    print(os.environ.get("OPENAI_API_KEY"))  # Debugging line to check if the key is loaded
     serper_api_key: str = Field(default="", env="SERPER_API_KEY", description="Serper API key for web search")
     
     # ChromaDB
@@ -28,10 +29,10 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, env="PORT")
     
     # LLM Models Configuration
-    phase1_model: str = Field(default="gpt-3.5-turbo", env="PHASE1_MODEL")
-    phase2_model: str = Field(default="gpt-3.5-turbo", env="PHASE2_MODEL")
-    phase3_model: str = Field(default="gpt-3.5-turbo", env="PHASE3_MODEL")
-    phase4_models: str = Field(default="gpt-3.5-turbo,claude-3-haiku,deepseek-v3", env="PHASE4_MODELS")
+    phase1_model: str = Field(default="gpt-4o-latest", env="PHASE1_MODEL")
+    phase2_model: str = Field(default="gpt-4o-latest", env="PHASE2_MODEL")
+    phase3_model: str = Field(default="gpt-4o-latest", env="PHASE3_MODEL")
+    phase4_models: str = Field(default="gpt-4o-latest,claude-3-haiku,deepseek-v3", env="PHASE4_MODELS")
     
     @property
     def phase4_models_list(self) -> List[str]:

@@ -89,18 +89,6 @@
         </div>
       </div>
 
-      <!-- 分页控制 -->
-      <div class="pagination-container">
-        <el-pagination
-          background
-          layout="prev, pager, next"
-          :total="store.searchResults.jobs.length"
-          :page-size="pageSize"
-          :current-page="currentPage"
-          @current-change="handlePageChange"
-        />
-      </div>
-
       <div class="jobs-grid">
         <el-card 
           v-for="(job, index) in paginatedJobs" 
