@@ -3,7 +3,7 @@ import axios from 'axios'
 // Create axios instance
 const api = axios.create({
   baseURL: '/api',
-  timeout: 60000,
+  timeout: 120000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -137,6 +137,45 @@ export const apiService = {
     return api.post('/phase3/review', reviewData)
   },
   
+  // 更新的Phase 3 HR评估API
+  async hrReview(reviewData) {
+    return api.post('/phase3/hr-review', reviewData)  // 使用正确的路径
+  },
+  
+  async generateImprovementPlan(resumeContent, jobPosting, feedback, hrPersona) {
+    return api.post('/phase3/improvement-plan', {
+      resume_content: resumeContent,
+      job_posting: jobPosting,
+      feedback: feedback,
+      hr_persona: hrPersona
+    })
+  },
+  
+  async applyImprovements(resumeContent, improvementPlan, selectedImprovements = null) {
+    return api.post('/phase3/apply-improvements', {
+      resume_content: resumeContent,
+      improvement_plan: improvementPlan,
+      selected_improvements: selectedImprovements
+    })
+  },
+  
+  // Phase 2 简历相关APIs
+  async optimizeResume(resumeContent, feedback) {
+    return api.post('/phase2/optimize', {
+      resume_content: resumeContent,
+      feedback: feedback
+    })
+  },
+  
+  async regenerateResume(userProfile, jobPosting, optimizationHints = null) {
+    return api.post('/phase2/regenerate', {
+      user_profile: userProfile,
+      job_posting: jobPosting,
+      optimization_hints: optimizationHints
+    })
+  },
+  
+  
   // Phase 4 - Scheduling APIs
   createInterviews(interviewData) {
     return api.post('/phase4/interviews', interviewData)
@@ -166,6 +205,82 @@ export const apiService = {
   // 新增：获取可用模型列表
   getAvailableModels() {
     return api.get('/models')
+    },
+  
+  // HR评估提交方法 - 支持单份简历评估
+  async submitHRReview(params) {
+    try {
+      const response = await api.post('/phase3/hr-review', {
+        resume_content: params.resume_content,
+        job_posting: params.job_posting,
+        hr_persona: params.hr_persona || 'experienced'
+      })
+      return response
+    } catch (error) {
+      console.error('HR评估失败:', error)
+      return {
+        success: false,
+        message: error.response?.data?.detail || error.message || '评估失败'
+      }
+    }
+  },
+  
+  // 批量HR评估方法 - 支持多份简历，每份可选择不同HR类型
+  async submitMultipleHRReview(resumeRequests) {
+    try {
+      // resumeRequests格式: [{ resume_content, job_posting, hr_persona }, ...]
+      const promises = resumeRequests.map(async (request, index) => {
+        try {
+          const response = await this.submitHRReview(request)
+          return {
+            index,
+            success: response.success !== false,
+            data: response.success !== false ? response : null,
+            error: response.success === false ? response.message : null
+          }
+        } catch (error) {
+          return {
+            index,
+            success: false,
+            data: null,
+            error: error.message
+          }
+        }
+      })
+      
+      const results = await Promise.all(promises)
+      return {
+        success: true,
+        results: results
+      }
+    } catch (error) {
+      console.error('批量HR评估失败:', error)
+      return {
+        success: false,
+        message: error.message,
+        results: []
+      }
+    }
+  },
+  
+  // 传统批量评估方法 - 所有简历使用相同HR类型
+  async submitBatchHRReview(resumes, hrPersona = 'experienced') {
+    try {
+      const requests = resumes.map(resume => ({
+        resume_content: resume.resume_content,
+        job_posting: resume.job_posting,
+        hr_persona: hrPersona
+      }))
+      
+      return await this.submitMultipleHRReview(requests)
+    } catch (error) {
+      console.error('批量HR评估失败:', error)
+      return {
+        success: false,
+        message: error.message,
+        results: []
+      }
+    }
   }
 }
 

@@ -181,7 +181,7 @@ DEBUG=true
 - gemini-2.5-flash-lite
 - gemini-2.5-pro
 - glm-4-32b-0414
-- gpt-4o-latest
+- gpt-3.5-turbo
 - grok-3-mini
 - o1
 - qwen2.5-14b-instruct

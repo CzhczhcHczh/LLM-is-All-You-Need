@@ -180,6 +180,7 @@ export const useAppStore = defineStore('app', {
       this.hrFeedback.loading = loading
     },
     
+    
     // Phase 4 actions
     setInterviews(interviews) {
       this.interviews.list = interviews

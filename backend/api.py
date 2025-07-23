@@ -2,6 +2,8 @@
 API routes for Job Planner Assistant.
 """
 
+import json
+import re
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,6 +14,7 @@ import time
 
 from database import get_db, create_user, get_user, UserCreate
 from agents import search_agent, phase2_agent, phase3_agent, phase4_agent
+from services import llm_service
 
 # Create main router
 router = APIRouter()
@@ -322,55 +325,188 @@ async def analyze_job_match(request: dict):
 
 
 # Phase 3 APIs - HR Simulation
-@router.post("/phase3/review", response_model=BaseResponse)
-async def hr_review(request: HRReviewRequest):
-    """Simulate HR review of resume."""
+@router.post("/phase3/hr-review", response_model=BaseResponse)
+async def hr_review(request: Dict[str, Any]):
+    """HR评估接口"""
     try:
+        # logger.info(f"Starting HR review with persona: {request.hr_persona}")
+        resume_content = request.get("resume_content")
+        job_posting = request.get("job_posting") 
+        hr_persona = request.get("hr_persona", "experienced")        
+        # # Call Phase3HRAgent for detailed evaluation
+        # # Convert Pydantic models to dictionaries
+        # resume_dict = request.resume_content
+        # job_posting_dict = request.job_posting.dict() if hasattr(request.job_posting, 'dict') else request.job_posting
+        logger.info(f"收到HR评估请求: hr_persona={hr_persona}")        
         result = phase3_agent.simulate_hr_review(
-            resume_content=request.resume_content,
-            job_posting=request.job_posting,
-            hr_persona=request.hr_persona
-        )
-        
-        return BaseResponse(
-            success=result["success"],
-            message=result["message"],
-            data=result["data"]
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in HR review: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="HR review failed"
-        )
-
-@router.post("/phase3/iterative", response_model=BaseResponse)
-async def iterative_feedback(
-    resume_content: Dict[str, Any], 
-    job_posting: Dict[str, Any],
-    max_rounds: int = 3
-):
-    """Get iterative feedback for resume improvement."""
-    try:
-        result = phase3_agent.iterative_feedback(
             resume_content=resume_content,
             job_posting=job_posting,
-            round_number=1,
-            max_rounds=max_rounds
+            hr_persona=hr_persona
         )
+        
         
         return BaseResponse(
             success=result["success"],
-            message=result["message"],
+            message=result["message"], 
             data=result["data"]
         )
         
     except Exception as e:
-        logger.error(f"Error in iterative feedback: {e}")
+        logger.error(f"HR评估异常: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Iterative feedback failed"
+            detail=f"HR评估失败: {str(e)}"
+        )
+
+async def generate_improvement_plan(resume_content: Dict[str, Any], job_posting: Dict[str, Any], 
+                                  feedback: Dict[str, Any], hr_persona: str) -> Dict[str, Any]:
+    """Generate detailed improvement plan based on HR feedback."""
+    try:
+        # 获取HR人设配置
+        persona_config = phase3_agent.HR_PERSONAS.get(hr_persona, phase3_agent.HR_PERSONAS["experienced"])
+        
+        improvement_prompt = f"""
+        基于以下HR反馈，为候选人制定详细的简历改进计划：
+
+        ## HR反馈信息：
+        HR类型：{persona_config['name']} - {persona_config['description']}
+        总体评分：{feedback.get('overall_score', 0)}/100
+        是否通过初筛：{'否' if not feedback.get('passes_initial_screening', False) else '是'}
+        
+        详细评分：
+        {json.dumps(feedback.get('detailed_scores', {}), ensure_ascii=False, indent=2)}
+        
+        主要优势：
+        {json.dumps(feedback.get('strengths', []), ensure_ascii=False, indent=2)}
+        
+        主要不足：
+        {json.dumps(feedback.get('weaknesses', []), ensure_ascii=False, indent=2)}
+        
+        HR建议：
+        {json.dumps(feedback.get('improvement_suggestions', []), ensure_ascii=False, indent=2)}
+
+        ## 目标职位信息：
+        {json.dumps(job_posting, ensure_ascii=False, indent=2)}
+
+        ## 当前简历：
+        {json.dumps(resume_content, ensure_ascii=False, indent=2)}
+
+        请制定一个详细的改进计划，返回JSON格式：
+        {{
+            "improvement_priority": "high",
+            "target_score": 85,
+            "estimated_improvement": 20,
+            "immediate_actions": [
+                {{
+                    "action": "具体改进行动",
+                    "section": "简历部分",
+                    "priority": "high",
+                    "expected_impact": "预期影响描述",
+                    "implementation_steps": ["步骤1", "步骤2"],
+                    "before_example": "改进前示例",
+                    "after_example": "改进后示例"
+                }}
+            ],
+            "skills_to_add": [
+                {{
+                    "skill": "技能名称",
+                    "reason": "添加理由",
+                    "learning_resources": ["学习资源1"],
+                    "certification_options": ["认证选项1"]
+                }}
+            ],
+            "next_steps": ["下一步行动1", "下一步行动2"]
+        }}
+        """
+        
+        improvement_result = llm_service.call_phase2_model(improvement_prompt)
+        
+        # Parse JSON result
+        json_match = re.search(r'\{.*\}', improvement_result, re.DOTALL)
+        if json_match:
+            improvement_plan = json.loads(json_match.group())
+            return improvement_plan
+        else:
+            return {"error": "Failed to parse improvement plan", "raw_result": improvement_result}
+            
+    except Exception as e:
+        logger.error(f"Error generating improvement plan: {e}")
+        return {"error": str(e)}
+
+@router.post("/phase3/apply-improvements", response_model=BaseResponse)
+async def apply_improvements(
+    resume_content: Dict[str, Any], 
+    improvement_plan: Dict[str, Any],
+    selected_improvements: List[str] = None
+):
+    """Apply selected improvements to resume."""
+    try:
+        # If no specific improvements selected, apply all high priority ones
+        if not selected_improvements:
+            selected_improvements = [
+                action["action"] for action in improvement_plan.get("immediate_actions", [])
+                if action.get("priority") == "high"
+            ]
+        
+        apply_prompt = f"""
+        请根据以下改进计划，对简历进行优化：
+
+        ## 当前简历：
+        {json.dumps(resume_content, ensure_ascii=False, indent=2)}
+
+        ## 改进计划：
+        {json.dumps(improvement_plan, ensure_ascii=False, indent=2)}
+
+        ## 要应用的改进：
+        {json.dumps(selected_improvements, ensure_ascii=False, indent=2)}
+
+        请返回优化后的完整简历JSON，并说明具体做了哪些改进：
+        {{
+            "optimized_resume": {{
+                "personal_info": {{}},
+                "summary": "",
+                "experience": [],
+                "education": [],
+                "skills": [],
+                "projects": []
+            }},
+            "improvements_applied": [
+                {{
+                    "section": "改进的部分",
+                    "change_description": "具体改进描述",
+                    "before": "改进前内容",
+                    "after": "改进后内容"
+                }}
+            ],
+            "optimization_summary": "整体优化总结"
+        }}
+        """
+        
+        optimization_result = llm_service.call_phase2_model(apply_prompt)
+        
+        # Parse JSON result
+        import re
+        json_match = re.search(r'\{.*\}', optimization_result, re.DOTALL)
+        if json_match:
+            optimized_data = json.loads(json_match.group())
+            
+            return BaseResponse(
+                success=True,
+                message="Resume optimization completed",
+                data=optimized_data
+            )
+        else:
+            return BaseResponse(
+                success=False,
+                message="Failed to parse optimization result",
+                data={"raw_result": optimization_result}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error applying improvements: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Resume optimization failed"
         )
 
 

@@ -25,8 +25,8 @@ import re
 
 from services import chromadb_service
 
-client = OpenAI(
-        api_key="sk-Z43OD6lBJ88hB6QgAGdKdSpBxg1A892PNzj9PAw8bar6DYdc",
+client = OpenAI(   
+        api_key="sk-HSLz7AUMoMfPm4desz0tRbehJrpdU1uSXUz7l3bLWFb2pYEE",
         base_url="https://api.chatanywhere.tech/v1"
     )
 

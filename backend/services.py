@@ -44,7 +44,7 @@ class LLMService:
                 model=model_name,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=4096,
+                max_tokens=4000
             )
             
             # 验证响应对象

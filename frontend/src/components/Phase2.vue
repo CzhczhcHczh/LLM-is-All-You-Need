@@ -356,7 +356,7 @@
       <!-- 操作提示 -->
       <el-alert
         title="简历已生成"
-        description="您可以查看下方生成的简历，进行下载或优化操作"
+        description="您可以查看下方生成的简历，下载专业Word文档或进行优化操作"
         type="success"
         show-icon
         :closable="false"
@@ -434,7 +434,7 @@
                     @click="downloadResume(index)"
                     :icon="Document"
                   >
-                    下载简历
+                    下载Word简历
                   </el-button>
                   <el-button 
                     size="small" 
@@ -1364,55 +1364,1201 @@ export default {
       })
     }
     
-    // 下载简历为PDF
+    // 下载简历为Word文档
     const downloadResume = async (index) => {
       const job = selectedJobs.value[index]
       const resume = generatedResumes.value[index]
+      
+      console.log('开始下载简历，参数:', { index, job, resume })
       
       if (!resume) {
         ElMessage.warning('简历数据不存在，无法下载')
         return
       }
       
+      // 验证简历数据结构
+      console.log('简历数据结构:', {
+        hasPersonalInfo: !!resume.personal_info,
+        hasSummary: !!resume.professional_summary,
+        hasEducation: !!resume.education,
+        hasExperience: !!resume.professional_experience,
+        dataKeys: Object.keys(resume)
+      })
+      
       try {
-        ElMessage.info('正在生成PDF文件，请稍候...')
+        ElMessage.info('正在生成Word文档，请稍候...')
         
-        // 动态导入html2pdf库
-        const html2pdf = (await import('html2pdf.js')).default
+        // 动态导入docx和file-saver库
+        const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } = await import('docx')
+        const { saveAs } = await import('file-saver')
         
-        // 获取简历内容DOM元素
-        const element = document.querySelector(`[data-resume-index="${index}"] .resume-content`)
-        if (!element) {
-          ElMessage.error('无法找到简历内容')
-          return
+        // 生成文档内容
+        const documentChildren = await generateWordContent(resume, job)
+        
+        // 验证生成的内容
+        if (!documentChildren || !Array.isArray(documentChildren) || documentChildren.length === 0) {
+          throw new Error('生成的文档内容为空，请检查简历数据')
         }
         
-        // PDF配置选项
-        const opt = {
-          margin: [10, 10, 10, 10], // 页边距 [top, right, bottom, left] mm
-          filename: `${job.job_title}_${job.company_name}_简历.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { 
-            scale: 2, // 提高清晰度
-            useCORS: true,
-            letterRendering: true
-          },
-          jsPDF: { 
-            unit: 'mm', 
-            format: 'a4', 
-            orientation: 'portrait' 
+        // 过滤掉undefined和无效的元素，并进行更严格的验证
+        const validChildren = documentChildren.filter(child => {
+          if (!child) {
+            console.warn('发现空元素，已过滤')
+            return false
+          }
+          
+          // 检查是否是有效的docx对象
+          if (typeof child !== 'object') {
+            console.warn('发现非对象元素，已过滤:', typeof child)
+            return false
+          }
+          
+          // 检查是否是docx的Paragraph或Table对象
+          if (!child.constructor || !child.constructor.name) {
+            console.warn('发现无构造函数的对象，已过滤:', child)
+            return false
+          }
+          
+          // 进一步验证对象结构
+          const constructorName = child.constructor.name
+          if (!['Paragraph', 'Table', 'TableOfContents'].includes(constructorName)) {
+            console.warn(`发现未知对象类型 ${constructorName}，已过滤:`, child)
+            return false
+          }
+          
+          return true
+        })
+        
+        console.log('原始段落数量:', documentChildren.length)
+        console.log('过滤后段落数量:', validChildren.length)
+        
+        if (validChildren.length === 0) {
+          throw new Error('生成的文档内容无效，请检查简历数据结构')
+        }
+        
+        console.log('有效段落示例:', validChildren[0])
+        console.log('有效段落类型:', validChildren[0]?.constructor?.name)
+        
+        // 验证每个段落的内部结构
+        validChildren.forEach((child, index) => {
+          if (child.constructor.name === 'Paragraph' && !child.root) {
+            console.warn(`段落 ${index} 缺少root属性:`, child)
+          }
+        })
+        
+        const finalValidChildren = validChildren.map(child => {
+          // 确保每个段落都有必要的属性
+          if (child.constructor.name === 'Paragraph') {
+            // 检查段落的内部结构
+            if (!child.root || !Array.isArray(child.root)) {
+              console.warn('段落缺少root属性，尝试修复')
+              return new Paragraph({ children: [new TextRun({ text: '段落内容修复中...' })] })
+            }
+          }
+          return child
+        })
+        
+        // 添加详细的Document创建前检查
+        console.log('=== Document创建前检查 ===')
+        finalValidChildren.forEach((child, index) => {
+          const debugInfo = {
+            type: child.constructor.name,
+            hasRoot: !!child.root,
+            rootLength: child.root?.length,
+            hasProperties: !!child.properties,
+            hasFileChild: !!child.fileChild,
+            keys: Object.keys(child)
+          }
+          
+          // 添加具体内容提取
+          let content = '无法提取内容'
+          
+          try {
+            if (child.constructor.name === 'Paragraph') {
+              // 提取段落文本内容
+              if (child.root && Array.isArray(child.root)) {
+                const textParts = []
+                child.root.forEach(rootItem => {
+                  if (rootItem && typeof rootItem === 'object') {
+                    // 查找 TextRun 内容
+                    if (rootItem.constructor && rootItem.constructor.name === 'TextRun') {
+                      // 尝试提取文本
+                      if (rootItem.text) {
+                        textParts.push(rootItem.text)
+                      } else if (rootItem.root && rootItem.root.length > 0) {
+                        // 深层查找文本
+                        rootItem.root.forEach(textElement => {
+                          if (textElement && textElement.text) {
+                            textParts.push(textElement.text)
+                          }
+                        })
+                      }
+                    }
+                  }
+                })
+                content = textParts.join(' ') || '段落无文本内容'
+              }
+            } else if (child.constructor.name === 'Table') {
+              content = '[表格内容 - 联系信息表格]'
+            }
+          } catch (extractError) {
+            content = `内容提取失败: ${extractError.message}`
+          }
+          
+          // console.log(`段落 ${index}:`, {
+          //   ...debugInfo,
+          //   content: content,
+          //   contentLength: content.length
+          // })
+          
+          // // 如果是段落，进一步详细分析
+          // if (child.constructor.name === 'Paragraph' && child.root) {
+          //   console.log(`  段落 ${index} 详细结构:`)
+          //   child.root.forEach((rootItem, rootIndex) => {
+          //     if (rootItem) {
+          //       console.log(`    root[${rootIndex}]:`, {
+          //         type: rootItem.constructor?.name || 'Unknown',
+          //         hasText: !!rootItem.text,
+          //         text: rootItem.text || '无直接文本',
+          //         hasRoot: !!rootItem.root,
+          //         rootLength: rootItem.root?.length || 0
+          //       })
+                
+          //       // 如果有嵌套的root，继续深入
+          //       if (rootItem.root && Array.isArray(rootItem.root)) {
+          //         rootItem.root.forEach((nestedItem, nestedIndex) => {
+          //           if (nestedItem) {
+          //             console.log(`      nested[${nestedIndex}]:`, {
+          //               type: nestedItem.constructor?.name || 'Unknown',
+          //               hasText: !!nestedItem.text,
+          //               text: nestedItem.text || '无文本',
+          //               properties: Object.keys(nestedItem).filter(key => !['constructor', 'root'].includes(key))
+          //             })
+          //           }
+          //         })
+          //       }
+          //     }
+          //   })
+          // }
+        })
+        
+        try {
+          console.log('开始创建Word文档，有效段落数量:', finalValidChildren.length)
+          
+          // 使用简化的Document创建，避免复杂的headers
+          const doc = new Document({
+            sections: [{
+              properties: {
+                page: {
+                  margin: {
+                    top: 720,    // 0.5英寸
+                    right: 720,  // 0.5英寸
+                    bottom: 720, // 0.5英寸
+                    left: 720,   // 0.5英寸
+                  },
+                },
+              },
+              children: finalValidChildren,
+            }],
+          })
+          
+          console.log('Document创建成功')
+          
+          // 生成并下载Word文档
+          const blob = await Packer.toBlob(doc)
+          const filename = `${resume.personal_info?.name || '简历'}_${job.job_title}_${job.company_name}.docx`
+          saveAs(blob, filename)
+          
+          ElMessage.success('简历Word文档下载完成！')
+          
+        } catch (docError) {
+          console.error('Document创建失败:', docError)
+          console.error('错误详情:', docError.stack)
+          
+          // 降级方案：创建最简单的文档
+          try {
+            console.log('尝试降级方案...')
+            
+            const simpleDoc = new Document({
+              sections: [{
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: `${resume.personal_info?.name || '简历'} - ${job.job_title}`,
+                        bold: true,
+                        size: 28,
+                        font: 'Microsoft YaHei',
+                      }),
+                    ],
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: '简历内容生成中遇到技术问题，请稍后重试或联系技术支持。',
+                        font: 'Microsoft YaHei',
+                        size: 22,
+                      }),
+                    ],
+                  }),
+                ],
+              }],
+            })
+            
+            const blob = await Packer.toBlob(simpleDoc)
+            const filename = `${resume.personal_info?.name || '简历'}_简化版.docx`
+            saveAs(blob, filename)
+            
+            ElMessage.warning('使用简化版本下载，完整版本正在修复中')
+            
+          } catch (fallbackError) {
+            console.error('降级方案也失败:', fallbackError)
+            ElMessage.error('Word文档生成失败，请稍后重试')
           }
         }
         
-        // 生成并下载PDF
-        await html2pdf().set(opt).from(element).save()
-        
-        ElMessage.success('简历PDF下载完成！')
-        
       } catch (error) {
-        console.error('PDF下载失败:', error)
-        ElMessage.error('PDF生成失败，请稍后重试')
+        console.error('Word文档生成失败:', error)
+        ElMessage.error('Word文档生成失败，请稍后重试')
       }
+    }
+    
+    // 生成Word文档内容
+    const generateWordContent = async (resume, job) => {
+      try {
+        const { Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType } = await import('docx')
+        
+        const children = []
+        const contentMapping = [] // 用于追踪内容映射
+        
+        // 安全创建段落的辅助函数
+        const safeParagraph = (config, description = '未知段落') => {
+          try {
+            const paragraph = new Paragraph(config)
+            if (!paragraph || typeof paragraph !== 'object') {
+              console.error('段落创建失败:', config)
+              return null
+            }
+            
+            // 提取文本内容用于映射
+            let extractedText = ''
+            if (config.children && Array.isArray(config.children)) {
+              extractedText = config.children
+                .filter(child => child && child.text)
+                .map(child => child.text)
+                .join(' ')
+            }
+            
+            contentMapping.push({
+              index: children.length,
+              description: description,
+              extractedText: extractedText.substring(0, 100) + (extractedText.length > 100 ? '...' : ''),
+              type: 'Paragraph'
+            })
+            
+            return paragraph
+          } catch (error) {
+            console.error('段落创建出错:', error, config)
+            return null
+          }
+        }
+        
+        // 安全创建表格的辅助函数
+        const safeTable = (config, description = '未知表格') => {
+          try {
+            const table = new Table(config)
+            if (!table || typeof table !== 'object') {
+              console.error('表格创建失败:', config)
+              return null
+            }
+            
+            contentMapping.push({
+              index: children.length,
+              description: description,
+              extractedText: '[表格内容]',
+              type: 'Table'
+            })
+            
+            return table
+          } catch (error) {
+            console.error('表格创建出错:', error, config)
+            return null
+          }
+        }
+        
+        // 验证输入数据
+        if (!resume) {
+          console.warn('简历数据为空，生成默认内容')
+          const defaultParagraph = safeParagraph({
+            children: [
+              new TextRun({
+                text: '简历数据缺失',
+                bold: true,
+                size: 32,
+                font: 'Microsoft YaHei',
+              }),
+            ],
+            heading: HeadingLevel.TITLE,
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
+          })
+          if (defaultParagraph) children.push(defaultParagraph)
+          return children
+        }
+        
+        console.log('开始生成Word内容，简历数据:', resume)
+        
+        // 添加原始简历数据结构调试
+        console.log('=== 原始简历数据结构 ===')
+        console.log('1. 姓名:', resume.personal_info?.name || resume.name || '未填写')
+        console.log('2. 个人简介:', resume.professional_summary ? resume.professional_summary.substring(0, 50) + '...' : '未填写')
+        console.log('3. 教育背景数量:', resume.education?.length || 0)
+        console.log('4. 工作经验数量:', resume.professional_experience?.length || 0)
+        console.log('5. 项目经验数量:', resume.key_projects?.length || 0)
+        console.log('6. 核心竞争力数量:', resume.core_competencies?.length || 0)
+        console.log('7. 技术技能:', resume.highlighted_skills?.technical_skills?.join(', ') || '无')
+        console.log('8. 框架工具:', resume.highlighted_skills?.frameworks_tools?.join(', ') || '无')
+        console.log('9. 软技能:', resume.highlighted_skills?.soft_skills?.join(', ') || '无')
+        
+        // 1. 文档标题 - "个人简历"
+        const documentTitle = safeParagraph({
+          children: [
+            new TextRun({
+              text: '个人简历',
+              bold: true,
+              size: 36, // 18pt
+              font: 'Microsoft YaHei',
+            }),
+          ],
+          heading: HeadingLevel.TITLE,
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        }, '文档标题 - 个人简历')
+        if (documentTitle) children.push(documentTitle)
+      
+      // 2. 基本信息（规整排列，使用制表符精确对齐）
+      if (resume.personal_info) {
+        const userName = resume.personal_info?.name || resume.name || '姓名未填写'
+        const userPhone = resume.personal_info.phone || '未填写'
+        
+        const firstLineParagraph = safeParagraph({
+          children: [
+            new TextRun({
+              text: '姓名：',
+              bold: true,
+              font: 'Microsoft YaHei',
+              size: 20,
+            }),
+            new TextRun({
+              text: `${userName}`,
+              font: 'Microsoft YaHei',
+              size: 20,
+            }),
+            new TextRun({
+              text: `\t电话：`,
+              bold: true,
+              font: 'Microsoft YaHei',
+              size: 20,
+            }),
+            new TextRun({
+              text: userPhone,
+              font: 'Microsoft YaHei',
+              size: 20,
+            }),
+          ],
+          spacing: { after: 30 },
+          tabStops: [
+            {
+              type: 'left',
+              position: 5000, // 调整制表位到5厘米处，确保"电话："和"地址："对齐
+            },
+          ],
+        }, `基本信息第一行 - ${userName} ${userPhone}`)
+        if (firstLineParagraph) children.push(firstLineParagraph)
+        
+        // 第二行：邮箱、地址
+        const userEmail = resume.personal_info.email || '未填写'
+        const userLocation = resume.personal_info.location || '未填写'
+        
+        const secondLineParagraph = safeParagraph({
+          children: [
+            new TextRun({
+              text: '邮箱：',
+              bold: true,
+              font: 'Microsoft YaHei',
+              size: 20,
+            }),
+            new TextRun({
+              text: `${userEmail}`,
+              font: 'Microsoft YaHei',
+              size: 20,
+            }),
+            new TextRun({
+              text: `\t地址：`,
+              bold: true,
+              font: 'Microsoft YaHei',
+              size: 20,
+            }),
+            new TextRun({
+              text: userLocation,
+              font: 'Microsoft YaHei',
+              size: 20,
+            }),
+          ],
+          spacing: { after: 200 },
+          tabStops: [
+            {
+              type: 'left',
+              position: 5000, // 与第一行使用相同的制表位，确保完美对齐
+            },
+          ],
+        }, `基本信息第二行 - ${userEmail} ${userLocation}`)
+        if (secondLineParagraph) children.push(secondLineParagraph)
+        
+      }
+      
+      // 3. 个人简介
+      if (resume.professional_summary) {
+        const summaryHeader = safeParagraph({
+          children: [
+            new TextRun({
+              text: '个人简介',
+              bold: true,
+              size: 24, // 12pt
+              font: 'Microsoft YaHei',
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 100, after: 5 }, // 最小间距
+        }, '个人简介标题')
+        if (summaryHeader) children.push(summaryHeader)
+        
+        // 添加分割线
+        const summaryDivider = safeParagraph({
+          children: [
+            new TextRun({
+              text: '———————————————————————————————————————————————————————————',
+              font: 'Microsoft YaHei',
+              size: 16,
+              color: '888888',
+            }),
+          ],
+          alignment: AlignmentType.LEFT,
+          spacing: { after: 5 }, // 最小间距
+        }, '个人简介分割线')
+        if (summaryDivider) children.push(summaryDivider)
+        
+        const summaryParagraph = safeParagraph({
+          children: [
+            new TextRun({
+              text: resume.professional_summary,
+              font: 'Microsoft YaHei',
+              size: 20, // 10pt
+            }),
+          ],
+          spacing: { after: 50, line: 240 }, // 1.2倍行距
+        }, `个人简介内容: ${resume.professional_summary.substring(0, 50)}...`)
+        if (summaryParagraph) children.push(summaryParagraph)
+      }
+      
+      // 4. 教育背景
+      if (resume.education && resume.education.length > 0) {
+        const educationHeader = safeParagraph({
+          children: [
+            new TextRun({
+              text: '教育背景',
+              bold: true,
+              size: 24,
+              font: 'Microsoft YaHei',
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 100, after: 5 }, // 最小间距
+        }, '教育背景标题')
+        if (educationHeader) children.push(educationHeader)
+        
+        // 添加分割线
+        const educationDivider = safeParagraph({
+          children: [
+            new TextRun({
+              text: '———————————————————————————————————————————————————————————',
+              font: 'Microsoft YaHei',
+              size: 16,
+              color: '888888',
+            }),
+          ],
+          alignment: AlignmentType.LEFT,
+          spacing: { after: 5 }, // 最小间距
+        }, '教育背景分割线')
+        if (educationDivider) children.push(educationDivider)
+        
+        resume.education.forEach((edu, index) => {
+          // 获取教育背景的各种字段
+          const school = edu.school || edu.institution || '学校名称未填写'
+          const degree = edu.degree || '学历未填写'
+          const major = edu.major || edu.field_of_study || '专业未填写'
+          const duration = edu.duration || edu.period || '时间未填写'
+          
+          // 主要信息左对齐，时间右对齐
+          const eduMainParagraph = safeParagraph({
+            children: [
+              new TextRun({
+                text: `${school} | ${degree} | ${major}`,
+                bold: true,
+                font: 'Microsoft YaHei',
+                size: 20,
+              }),
+              new TextRun({
+                text: `\t${duration}`,
+                font: 'Microsoft YaHei',
+                size: 20,
+                bold: true,
+                color: '000000',
+              }),
+            ],
+            spacing: { after: 30 },
+            tabStops: [
+              {
+                type: 'right',
+                position: 9600, // 右对齐制表位
+              },
+            ],
+          }, `教育背景${index + 1}: ${school} - ${degree}`)
+          if (eduMainParagraph) children.push(eduMainParagraph)
+          
+          // 添加GPA和其他详细信息
+          const details = []
+          if (edu.gpa) details.push(`GPA: ${edu.gpa}`)
+          if (edu.honors) details.push(`荣誉: ${edu.honors}`)
+          if (edu.relevant_courses && edu.relevant_courses.length > 0) {
+            details.push(`主要课程: ${edu.relevant_courses.join(', ')}`)
+          }
+          
+          if (details.length > 0) {
+            const eduDetailsParagraph = safeParagraph({
+              children: [
+                new TextRun({
+                  text: details.join(' | '),
+                  font: 'Microsoft YaHei',
+                  size: 20,
+                  color: '666666',
+                }),
+              ],
+              spacing: { after: index === resume.education.length - 1 ? 50 : 50 },
+            }, `教育背景${index + 1}详情: ${details.join(' | ')}`)
+            if (eduDetailsParagraph) children.push(eduDetailsParagraph)
+          } else if (index < resume.education.length - 1) {
+            // 非最后一个教育背景项目后的小间距
+            const spaceParagraph = safeParagraph({ text: '', spacing: { after: 50 } }, `教育背景${index + 1}后间距`)
+            if (spaceParagraph) children.push(spaceParagraph)
+          }
+        })
+      }
+      
+      // 5. 工作经验
+      if (resume.professional_experience && resume.professional_experience.length > 0) {
+        const workHeader = safeParagraph({
+          children: [
+            new TextRun({
+              text: '工作经验',
+              bold: true,
+              size: 24,
+              font: 'Microsoft YaHei',
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 100, after: 5 }, // 最小间距
+        }, '工作经验标题')
+        if (workHeader) children.push(workHeader)
+        
+        // 添加分割线
+        const workDivider = safeParagraph({
+          children: [
+            new TextRun({
+              text: '———————————————————————————————————————————————————————————',
+              font: 'Microsoft YaHei',
+              size: 16,
+              color: '888888',
+            }),
+          ],
+          alignment: AlignmentType.LEFT,
+          spacing: { after: 5 }, // 最小间距
+        }, '工作经验分割线')
+        if (workDivider) children.push(workDivider)
+        
+        resume.professional_experience.forEach((exp, index) => {
+          // 数据验证
+          if (!exp || typeof exp !== 'object') {
+            console.warn('跳过无效的工作经验数据:', exp)
+            return
+          }
+          
+          const company = exp.company || exp.employer || '公司名称未填写'
+          const position = exp.position || exp.title || exp.job_title || '职位未填写'
+          const duration = exp.duration || exp.period || '时间未填写'
+          
+          // 工作经验标题行 - 公司职位左对齐，时间右对齐
+          const expMainParagraph = safeParagraph({
+            children: [
+              new TextRun({
+                text: `${company} | ${position}`,
+                bold: true,
+                font: 'Microsoft YaHei',
+                size: 20,
+              }),
+              new TextRun({
+                text: `\t${duration}`,
+                font: 'Microsoft YaHei',
+                size: 20,
+                bold: true,
+                color: '000000',
+              }),
+            ],
+            spacing: { after: 30 },
+            tabStops: [
+              {
+                type: 'right',
+                position: 9600,
+              },
+            ],
+          }, `工作经验${index + 1}: ${company} - ${position}`)
+          if (expMainParagraph) children.push(expMainParagraph)
+          
+          // 工作描述
+          if (exp.description || exp.job_description) {
+            const description = exp.description || exp.job_description
+            const expDescParagraph = safeParagraph({
+              children: [
+                new TextRun({
+                  text: `工作职责：${description}`,
+                  font: 'Microsoft YaHei',
+                  size: 20,
+                }),
+              ],
+              spacing: { after: 30 },
+            }, `工作经验${index + 1}描述: ${description.substring(0, 30)}...`)
+            if (expDescParagraph) children.push(expDescParagraph)
+          }
+          
+          // 主要职责
+          if (exp.responsibilities && Array.isArray(exp.responsibilities) && exp.responsibilities.length > 0) {
+            const responsibilitiesText = exp.responsibilities.join('；')
+            const respParagraph = safeParagraph({
+              children: [
+                new TextRun({
+                  text: `主要职责：${responsibilitiesText}`,
+                  font: 'Microsoft YaHei',
+                  size: 20,
+                }),
+              ],
+              spacing: { after: 30 },
+            }, `工作经验${index + 1}主要职责`)
+            if (respParagraph) children.push(respParagraph)
+          }
+          
+          // 关键成就
+          if (exp.achievements && Array.isArray(exp.achievements) && exp.achievements.length > 0) {
+            const achievementsText = exp.achievements.filter(a => a && typeof a === 'string').join('；')
+            if (achievementsText) {
+              const achievementsParagraph = safeParagraph({
+                children: [
+                  new TextRun({
+                    text: `关键成就：${achievementsText}`,
+                    font: 'Microsoft YaHei',
+                    size: 20,
+                  }),
+                ],
+                spacing: { after: 30 },
+              }, `工作经验${index + 1}关键成就`)
+              if (achievementsParagraph) children.push(achievementsParagraph)
+            }
+          }
+          
+          // 技能和工具
+          if (exp.skills_used && Array.isArray(exp.skills_used) && exp.skills_used.length > 0) {
+            const skillsText = exp.skills_used.join('、')
+            const skillsParagraph = safeParagraph({
+              children: [
+                new TextRun({
+                  text: `使用技能：${skillsText}`,
+                  font: 'Microsoft YaHei',
+                  size: 20,
+                  color: '0066cc',
+                }),
+              ],
+              spacing: { after: index === resume.professional_experience.length - 1 ? 50 : 50 },
+            }, `工作经验${index + 1}使用技能`)
+            if (skillsParagraph) children.push(skillsParagraph)
+          } else if (index < resume.professional_experience.length - 1) {
+            // 非最后一个工作经验的间距
+            const spaceParagraph = safeParagraph({ text: '', spacing: { after: 50 } }, `工作经验${index + 1}后间距`)
+            if (spaceParagraph) children.push(spaceParagraph)
+          }
+        })
+      }
+      
+      // 6. 项目经验
+      if (resume.key_projects && resume.key_projects.length > 0) {
+        const projectHeader = safeParagraph({
+          children: [
+            new TextRun({
+              text: '项目经验',
+              bold: true,
+              size: 24,
+              font: 'Microsoft YaHei',
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 100, after: 5 }, // 最小间距
+        }, '项目经验标题')
+        if (projectHeader) children.push(projectHeader)
+        
+        // 添加分割线
+        const projectDivider = safeParagraph({
+          children: [
+            new TextRun({
+              text: '———————————————————————————————————————————————————————————',
+              font: 'Microsoft YaHei',
+              size: 16,
+              color: '888888',
+            }),
+          ],
+          alignment: AlignmentType.LEFT,
+          spacing: { after: 5 }, // 最小间距
+        }, '项目经验分割线')
+        if (projectDivider) children.push(projectDivider)
+        
+        resume.key_projects.forEach((project, index) => {
+          // 数据验证
+          if (!project || typeof project !== 'object') {
+            console.warn('跳过无效的项目数据:', project)
+            return
+          }
+          
+          const projectName = project.name || project.title || '项目名称未填写'
+          const duration = project.duration || project.period || '时间未填写'
+          const role = project.role || project.position || ''
+          
+          // 项目标题行 - 项目名称和角色左对齐，时间右对齐
+          const titleText = role ? `${projectName} | ${role}` : projectName
+          const projectMainParagraph = safeParagraph({
+            children: [
+              new TextRun({
+                text: titleText,
+                bold: true,
+                font: 'Microsoft YaHei',
+                size: 20,
+              }),
+              new TextRun({
+                text: `\t${duration}`,
+                font: 'Microsoft YaHei',
+                size: 20,
+                bold: true,
+                color: '000000',
+              }),
+            ],
+            spacing: { after: 30 },
+            tabStops: [
+              {
+                type: 'right',
+                position: 9600,
+              },
+            ],
+          }, `项目经验${index + 1}: ${projectName}`)
+          if (projectMainParagraph) children.push(projectMainParagraph)
+          
+          // 项目描述
+          if (project.description || project.project_description) {
+            const description = project.description || project.project_description
+            const projectDescParagraph = safeParagraph({
+              children: [
+                new TextRun({
+                  text: `项目描述：${description}`,
+                  font: 'Microsoft YaHei',
+                  size: 20,
+                }),
+              ],
+              spacing: { after: 30 },
+            }, `项目经验${index + 1}描述: ${description.substring(0, 30)}...`)
+            if (projectDescParagraph) children.push(projectDescParagraph)
+          }
+          
+          // 主要职责
+          if (project.responsibilities && Array.isArray(project.responsibilities) && project.responsibilities.length > 0) {
+            const responsibilitiesText = project.responsibilities.join('；')
+            const respParagraph = safeParagraph({
+              children: [
+                new TextRun({
+                  text: `主要职责：${responsibilitiesText}`,
+                  font: 'Microsoft YaHei',
+                  size: 20,
+                }),
+              ],
+              spacing: { after: 30 },
+            }, `项目经验${index + 1}主要职责`)
+            if (respParagraph) children.push(respParagraph)
+          }
+          
+          // 技术栈
+          if (project.technologies && Array.isArray(project.technologies) && project.technologies.length > 0) {
+            const techParagraph = safeParagraph({
+              children: [
+                new TextRun({
+                  text: `技术栈：${project.technologies.join('、')}`,
+                  font: 'Microsoft YaHei',
+                  size: 20,
+                  color: '0066cc',
+                }),
+              ],
+              spacing: { after: 30 },
+            }, `项目经验${index + 1}技术栈: ${project.technologies.join(', ')}`)
+            if (techParagraph) children.push(techParagraph)
+          }
+          
+          // 项目成果
+          if (project.achievements && Array.isArray(project.achievements) && project.achievements.length > 0) {
+            const achievementsText = project.achievements.filter(a => a && typeof a === 'string').join('；')
+            if (achievementsText) {
+              const achievementsParagraph = safeParagraph({
+                children: [
+                  new TextRun({
+                    text: `项目成果：${achievementsText}`,
+                    font: 'Microsoft YaHei',
+                    size: 20,
+                  }),
+                ],
+                spacing: { after: 30 },
+              }, `项目经验${index + 1}项目成果`)
+              if (achievementsParagraph) children.push(achievementsParagraph)
+            }
+          }
+          
+          // 挑战与解决方案
+          if (project.challenges_and_solutions || project.challenges) {
+            const challengesText = project.challenges_and_solutions || project.challenges
+            const challengesParagraph = safeParagraph({
+              children: [
+                new TextRun({
+                  text: `挑战与解决方案：${challengesText}`,
+                  font: 'Microsoft YaHei',
+                  size: 20,
+                }),
+              ],
+              spacing: { after: 30 },
+            }, `项目经验${index + 1}挑战与解决方案`)
+            if (challengesParagraph) children.push(challengesParagraph)
+          }
+          
+          // 项目亮点或创新点
+          if (project.highlights || project.innovations) {
+            const highlightsText = project.highlights || project.innovations
+            const highlightsParagraph = safeParagraph({
+              children: [
+                new TextRun({
+                  text: `项目亮点：${highlightsText}`,
+                  font: 'Microsoft YaHei',
+                  size: 20,
+                }),
+              ],
+              spacing: { after: index === resume.key_projects.length - 1 ? 50 : 50 },
+            }, `项目经验${index + 1}项目亮点`)
+            if (highlightsParagraph) children.push(highlightsParagraph)
+          } else if (index < resume.key_projects.length - 1) {
+            // 非最后一个项目经验的间距
+            const spaceParagraph = safeParagraph({ text: '', spacing: { after: 50 } }, `项目经验${index + 1}后间距`)
+            if (spaceParagraph) children.push(spaceParagraph)
+          }
+        })
+      }
+      
+      // 7. 核心竞争力
+      if (resume.core_competencies && resume.core_competencies.length > 0) {
+        const competencyHeader = safeParagraph({
+          children: [
+            new TextRun({
+              text: '核心竞争力',
+              bold: true,
+              size: 24,
+              font: 'Microsoft YaHei',
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 100, after: 5 }, // 最小间距
+        }, '核心竞争力标题')
+        if (competencyHeader) children.push(competencyHeader)
+        
+        // 添加分割线
+        const competencyDivider = safeParagraph({
+          children: [
+            new TextRun({
+              text: '———————————————————————————————————————————————————————————',
+              font: 'Microsoft YaHei',
+              size: 16,
+              color: '888888',
+            }),
+          ],
+          alignment: AlignmentType.LEFT,
+          spacing: { after: 5 }, // 最小间距
+        }, '核心竞争力分割线')
+        if (competencyDivider) children.push(competencyDivider)
+        
+        // 将核心竞争力组合成一段文字，而不是分成多个段落
+        const competenciesText = resume.core_competencies.join('；')
+        const competencyParagraph = safeParagraph({
+          children: [
+            new TextRun({
+              text: competenciesText,
+              font: 'Microsoft YaHei',
+              size: 20,
+            }),
+          ],
+          spacing: { after: 50 },
+        }, `核心竞争力内容: ${competenciesText}`)
+        if (competencyParagraph) children.push(competencyParagraph)
+      }
+      
+      // 8. 技能特长
+      if (resume.highlighted_skills) {
+        const skillsHeader = safeParagraph({
+          children: [
+            new TextRun({
+              text: '技能特长',
+              bold: true,
+              size: 24,
+              font: 'Microsoft YaHei',
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 100, after: 5 }, // 最小间距
+        }, '技能特长标题')
+        if (skillsHeader) children.push(skillsHeader)
+        
+        // 添加分割线
+        const skillsDivider = safeParagraph({
+          children: [
+            new TextRun({
+              text: '———————————————————————————————————————————————————————————',
+              font: 'Microsoft YaHei',
+              size: 16,
+              color: '888888',
+            }),
+          ],
+          alignment: AlignmentType.LEFT,
+          spacing: { after: 5 }, // 最小间距
+        }, '技能特长分割线')
+        if (skillsDivider) children.push(skillsDivider)
+        
+        // 技术技能
+        if (resume.highlighted_skills.technical_skills && resume.highlighted_skills.technical_skills.length > 0) {
+          const techSkillsParagraph = safeParagraph({
+            children: [
+              new TextRun({
+                text: '技术技能：',
+                bold: true,
+                font: 'Microsoft YaHei',
+                size: 20,
+              }),
+              new TextRun({
+                text: resume.highlighted_skills.technical_skills.join('、'),
+                font: 'Microsoft YaHei',
+                size: 20,
+              }),
+            ],
+            spacing: { after: 30 },
+          }, `技术技能: ${resume.highlighted_skills.technical_skills.join(', ')}`)
+          if (techSkillsParagraph) children.push(techSkillsParagraph)
+        }
+        
+        // 框架工具
+        if (resume.highlighted_skills.frameworks_tools && resume.highlighted_skills.frameworks_tools.length > 0) {
+          const frameworksParagraph = safeParagraph({
+            children: [
+              new TextRun({
+                text: '框架工具：',
+                bold: true,
+                font: 'Microsoft YaHei',
+                size: 20,
+              }),
+              new TextRun({
+                text: resume.highlighted_skills.frameworks_tools.join('、'),
+                font: 'Microsoft YaHei',
+                size: 20,
+              }),
+            ],
+            spacing: { after: 30 },
+          }, `框架工具: ${resume.highlighted_skills.frameworks_tools.join(', ')}`)
+          if (frameworksParagraph) children.push(frameworksParagraph)
+        }
+        
+        // 软技能
+        if (resume.highlighted_skills.soft_skills && resume.highlighted_skills.soft_skills.length > 0) {
+          const softSkillsParagraph = safeParagraph({
+            children: [
+              new TextRun({
+                text: '软技能：',
+                bold: true,
+                font: 'Microsoft YaHei',
+                size: 20,
+              }),
+              new TextRun({
+                text: resume.highlighted_skills.soft_skills.join('、'),
+                font: 'Microsoft YaHei',
+                size: 20,
+              }),
+            ],
+            spacing: { after: 50 },
+          }, `软技能: ${resume.highlighted_skills.soft_skills.join(', ')}`)
+          if (softSkillsParagraph) children.push(softSkillsParagraph)
+        }
+      }
+      
+      // 9. 其他信息
+      const otherSections = []
+      
+      if (resume.languages && resume.languages.length > 0) {
+        otherSections.push(`语言能力：${resume.languages.map(lang => `${lang.language}(${lang.proficiency})`).join('、')}`)
+      }
+      
+      if (resume.certifications && resume.certifications.length > 0) {
+        otherSections.push(`认证证书：${resume.certifications.map(cert => cert.name || cert.title).join('、')}`)
+      }
+      
+      if (resume.awards && resume.awards.length > 0) {
+        otherSections.push(`获得奖项：${resume.awards.map(award => award.name || award.title).join('、')}`)
+      }
+      
+      if (resume.publications && resume.publications.length > 0) {
+        otherSections.push(`发表论文：${resume.publications.map(pub => pub.title || pub.name).join('、')}`)
+      }
+      
+      if (otherSections.length > 0) {
+        const otherInfoHeader = safeParagraph({
+          children: [
+            new TextRun({
+              text: '其他信息',
+              bold: true,
+              size: 24,
+              font: 'Microsoft YaHei',
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 100, after: 5 }, // 最小间距
+        }, '其他信息标题')
+        if (otherInfoHeader) children.push(otherInfoHeader)
+        
+        // 添加分割线
+        const otherInfoDivider = safeParagraph({
+          children: [
+            new TextRun({
+              text: '———————————————————————————————————————————————————————————',
+              font: 'Microsoft YaHei',
+              size: 16,
+              color: '888888',
+            }),
+          ],
+          alignment: AlignmentType.LEFT,
+          spacing: { after: 5 }, // 最小间距
+        }, '其他信息分割线')
+        if (otherInfoDivider) children.push(otherInfoDivider)
+        
+        otherSections.forEach((section, index) => {
+          const otherSectionParagraph = safeParagraph({
+            children: [
+              new TextRun({
+                text: section,
+                font: 'Microsoft YaHei',
+                size: 20,
+              }),
+            ],
+            spacing: { after: index === otherSections.length - 1 ? 50 : 30 },
+          }, `其他信息${index + 1}: ${section.substring(0, 30)}...`)
+          if (otherSectionParagraph) children.push(otherSectionParagraph)
+        })
+      }
+      
+      // 最终验证：过滤掉创建失败的元素
+      const finalChildren = children.filter(child => {
+        if (!child) {
+          console.warn('发现空的段落对象，已过滤')
+          return false
+        }
+        if (typeof child !== 'object') {
+          console.warn('发现非对象的段落，已过滤:', typeof child)
+          return false
+        }
+        return true
+      })
+      
+      console.log('最终段落数量:', finalChildren.length)
+      
+      // 显示内容映射表
+      console.log('\n=== 生成的Word段落内容映射表 ===')
+      console.table(contentMapping.map((item, index) => ({
+        '序号': index + 1,
+        '段落描述': item.description,
+        '提取的文本': item.extractedText || '(无文本内容)',
+        '段落类型': item.type || '未知'
+      })))
+      
+      console.log('\n=== 原始数据 vs 生成内容对比 ===')
+      console.log('原始姓名:', resume.personal_info?.name || resume.name || '未填写')
+      console.log('原始简介长度:', resume.professional_summary?.length || 0, '字符')
+      console.log('教育背景条数:', resume.education?.length || 0)
+      console.log('工作经验条数:', resume.professional_experience?.length || 0)
+      console.log('项目经验条数:', resume.key_projects?.length || 0)
+      console.log('核心竞争力条数:', resume.core_competencies?.length || 0)
+      console.log('生成的Word段落总数:', finalChildren.length)
+      
+      if (finalChildren.length === 0) {
+        console.error('所有段落都创建失败，返回默认内容')
+        const fallbackParagraph = new Paragraph({
+          children: [
+            new TextRun({
+              text: '简历生成过程中出现问题，请重试',
+              bold: true,
+              size: 24,
+              font: 'Microsoft YaHei',
+            }),
+          ],
+          spacing: { after: 200 },
+        })
+        return [fallbackParagraph]
+      }
+      
+      return finalChildren
+      
+    } catch (error) {
+      console.error('生成Word内容失败:', error)
+      console.error('错误详情:', error.stack)
+      // 返回默认内容
+      const { Paragraph, TextRun, HeadingLevel, AlignmentType } = await import('docx')
+      return [
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: '简历内容生成失败，请检查数据格式',
+              bold: true,
+              size: 32,
+              font: 'Microsoft YaHei',
+            }),
+          ],
+          heading: HeadingLevel.TITLE,
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `错误信息: ${error.message}`,
+              font: 'Microsoft YaHei',
+              size: 22,
+              color: '666666',
+            }),
+          ],
+          spacing: { after: 200 },
+        })
+      ]
+    }
     }
     
     // 优化简历
@@ -2252,7 +3398,7 @@ export default {
   gap: 12px;
 }
 
-/* PDF下载提示样式 */
+/* Word文档下载提示样式 */
 .download-hint {
   padding: 12px;
   background: #f0f9ff;
