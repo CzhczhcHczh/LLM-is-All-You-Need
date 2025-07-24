@@ -1,0 +1,44 @@
+# 前端依赖
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+frontend/.cache/
+frontend/.temp/
+frontend/.output/
+frontend/.DS_Store
+
+# 确保任何子目录中的node_modules也被忽略
+**/node_modules/
+**/node_modules/**/*
+
+# Vite/webpack 临时文件
+frontend/**/*.log
+frontend/**/*.tmp
+frontend/**/*.temp
+frontend/**/*.map
+
+# Mac 系统文件
+.DS_Store
+
+# 其他常见忽略
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 后端缓存文件
+backend/__pycache__/
+backend/**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/__pycache__/
+
+# ChromaDB 数据文件
+backend/data/chromadb/
+backend/data/chroma/
+**/chromadb/**/*.bin
+**/chroma/**/*.bin
+*.bin
+**/index_metadata.pickle
+**/uuid_to_id.pickle

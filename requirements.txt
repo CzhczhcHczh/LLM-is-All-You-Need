@@ -1,0 +1,25 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+
+# AI and LLM
+openai>=1.6.1
+langchain>=0.0.350
+langchain-openai>=0.0.2
+
+# Vector Database
+chromadb>=0.4.18
+
+# Search API
+requests>=2.31.0
+
+# Utilities
+python-dotenv>=1.0.0
+loguru>=0.7.2
+pydantic>=2.5.0
+pydantic-settings>=2.0.0
+
