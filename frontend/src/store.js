@@ -32,6 +32,14 @@ export const useAppStore = defineStore('app', {
       generationProgress: 0
     },
     
+    // Phase 2 - 新增结构，与现有Phase3.vue兼容
+    phase2: {
+      generatedResumes: {}, // 存储生成的简历 {resumeId: resumeData}
+      optimizationHistory: [], // 存储优化历史
+      userProfile: null,
+      selectedJobs: []
+    },
+    
     // Phase 3 - HR Feedback
     hrFeedback: {
       list: [],
@@ -161,6 +169,38 @@ export const useAppStore = defineStore('app', {
     
     clearMultipleResumes() {
       this.resumes.multipleResumes = {}
+    },
+
+    // Phase 2 - 新增兼容方法
+    setPhase2GeneratedResumes(resumes) {
+      this.phase2.generatedResumes = resumes
+    },
+
+    addPhase2GeneratedResume(resumeId, resume) {
+      this.phase2.generatedResumes[resumeId] = resume
+    },
+
+    updatePhase2GeneratedResume(resumeId, resume) {
+      if (this.phase2.generatedResumes[resumeId]) {
+        this.phase2.generatedResumes[resumeId] = resume
+      }
+    },
+
+    setPhase2OptimizationHistory(history) {
+      this.phase2.optimizationHistory = history
+    },
+
+    addPhase2OptimizationHistory(item) {
+      this.phase2.optimizationHistory = this.phase2.optimizationHistory || []
+      this.phase2.optimizationHistory.push(item)
+    },
+
+    setPhase2UserProfile(profile) {
+      this.phase2.userProfile = profile
+    },
+
+    setPhase2SelectedJobs(jobs) {
+      this.phase2.selectedJobs = jobs
     },
     
     // Phase 3 actions

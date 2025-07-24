@@ -644,6 +644,8 @@ class Phase2ResumeAgent:
 - 确保JSON格式正确，所有字符串都用双引号包围
 - 所有字段都必须填写，不能为空
 - professional_summary尽量丰富，能够体现个人优势以及与目标公司的契合性
+- 只能在措辞上进行包装，而不能歪曲事实，例如"完成10+活动页面交付"不能写成"完成20+活动页面交付"，“校二等奖学金”不能写成“校一等奖学金”
+- "education"中的"academic_achievements"不能歪曲事实，没有就填优秀学生
 
 请现在生成JSON简历,，注意以下要求：
 
@@ -956,26 +958,381 @@ class Phase2ResumeAgent:
 
     @staticmethod
     def optimize_resume_content(resume_content: Dict[str, Any], feedback: Dict[str, Any], optimization_focus: List[str] = None) -> Dict[str, Any]:
-        """优化简历内容"""
+        """基于HR反馈优化简历内容"""
         try:
+            import json
+            import re
+            import time
+            from services import llm_service
+            
             if optimization_focus is None:
                 optimization_focus = []
+            
+            # 提取反馈数据
+            feedback_data = feedback.get('data', {}).get('feedback', feedback) if 'data' in feedback else feedback
+            company_name = feedback.get('data', {}).get('company_name', '目标公司')
+            job_title = feedback.get('data', {}).get('job_title', '目标职位')
+            hr_persona = feedback.get('data', {}).get('hr_persona', 'experienced')
+            overall_score = feedback_data.get('overall_score', 0)
+            detailed_scores = feedback_data.get('detailed_scores', {})
+            strengths = feedback_data.get('strengths', [])
+            weaknesses = feedback_data.get('weaknesses', [])
+            improvement_suggestions = feedback_data.get('improvement_suggestions', [])
+            
+            # 创建优化提示词
+            optimization_prompt = f"""
+你是一位顶级的简历优化专家，具有15年以上的招聘和求职经验。现在需要你基于HR的专业反馈来优化简历，提升竞争力。
+
+## HR评估反馈分析
+
+### 基本信息
+- 目标公司：{company_name}
+- 目标职位：{job_title}
+- HR类型：{hr_persona}
+- 当前评分：{overall_score}/100分
+
+### 详细评分
+{json.dumps(detailed_scores, ensure_ascii=False, indent=2)}
+
+### 主要优势（需要强化突出）
+{json.dumps(strengths, ensure_ascii=False, indent=2)}
+
+### 主要不足（需要重点优化）
+{json.dumps(weaknesses, ensure_ascii=False, indent=2)}
+
+### HR改进建议
+{json.dumps(improvement_suggestions, ensure_ascii=False, indent=2)}
+
+## 当前简历内容
+{json.dumps(resume_content, ensure_ascii=False, indent=2)}
+
+## 优化策略和要求
+
+### 核心优化目标
+1. **突出优势**：强化和放大HR认可的技能和经验优势
+2. **弥补不足**：通过重新包装和角度调整来减少弱项影响
+3. **提升匹配度**：更精准地对接目标职位需求
+4. **增强说服力**：用更有力的数据和案例证明能力
+5. **职业稳定性**：通过职业规划展示长期承诺
+
+### 具体优化要求
+
+#### 1. 个人简介优化
+- 根据优势强化核心竞争力描述
+- 融入{company_name}的企业价值观和文化
+- 突出与{job_title}职位的高度匹配性
+- 展现学习能力和发展潜力
+
+#### 2. 工作经验优化
+- 重新包装项目规模和复杂度描述
+- 强化技术深度和业务影响力
+- 突出团队协作和领导力体现
+- 用更具体的量化数据证明成果
+
+#### 3. 技能体系优化
+- 优先展示匹配的核心技能
+- 补充新兴技术学习能力
+- 体现技术广度和深度平衡
+- 展现持续学习和自我提升
+
+#### 4. 项目经验优化
+- 重新描述项目规模和影响力
+- 突出技术难点和解决方案
+- 强化架构设计和系统思维
+- 展现创新能力和业务价值
+
+#### 5. 职业发展优化
+- 展现清晰的职业规划
+- 体现对{company_name}的长期承诺
+- 突出在该职位的发展潜力
+- 展现适应大厂文化的能力
+
+### 优化原则
+1. **真实性第一**：所有优化必须基于真实信息，不可虚构
+2. **针对性强化**：每个部分都要体现对反馈的针对性改进
+3. **数据驱动**：用具体数字和成果证明能力
+4. **差异化突出**：强化独特优势和价值主张
+5. **格式一致**：严格按照原有JSON格式返回
+
+请基于以上分析和要求，生成优化后的简历。确保：
+- 针对每个弱项都有相应的改进措施
+- 强化每个优势点的表达
+- 整体提升职位匹配度和竞争力
+- 保持所有字段格式与原简历完全一致
+
+请生成以下JSON格式的优化简历：
+
+{{
+    "personal_info": {{
+        "name": "候选人姓名",
+        "email": "邮箱地址", 
+        "phone": "联系电话",
+        "location": "居住地址",
+        "linkedin": "LinkedIn链接（如有）",
+        "github": "GitHub链接（如有）",
+        "portfolio": "作品集链接（如有）"
+    }},
+    "professional_summary": "个人简介（250-300字，强化优势，回应反馈，突出与目标职位匹配度）",
+    "core_competencies": [
+        "核心竞争力1（基于优势强化）",
+        "核心竞争力2（针对弱项改进）",
+        "核心竞争力3（体现发展潜力）"
+    ],
+    "highlighted_skills": {{
+        "technical_skills": ["技术技能1", "技术技能2", "技术技能3"],
+        "frameworks_tools": ["框架工具1", "框架工具2", "框架工具3"],
+        "soft_skills": ["软技能1", "软技能2", "软技能3"]
+    }},
+    "professional_experience": [
+        {{
+            "company": "公司名称",
+            "position": "职位名称",
+            "location": "工作地点", 
+            "duration": "工作时间",
+            "employment_type": "工作类型",
+            "company_description": "公司简介（强化规模和影响力描述）",
+            "responsibilities": [
+                "核心职责1（强化技术深度和复杂度）",
+                "核心职责2（突出团队协作和领导力）",
+                "核心职责3（体现业务影响和价值创造）"
+            ],
+            "key_achievements": [
+                "关键成果1（用更具体数据量化业务价值）",
+                "关键成果2（突出技术创新和解决方案）",
+                "关键成果3（展现团队影响和领导能力）"
+            ],
+            "technologies_used": ["相关技术1", "相关技术2", "相关技术3"]
+        }}
+    ],
+    "key_projects": [
+        {{
+            "name": "项目名称",
+            "role": "项目角色（强化领导和责任）",
+            "duration": "项目周期",
+            "team_size": "团队规模",
+            "project_scale": "项目规模描述（突出复杂度和影响力）",
+            "description": "项目描述（强化技术难度和业务价值）",
+            "key_responsibilities": [
+                "核心职责1（突出架构设计和技术深度）",
+                "核心职责2（强化业务理解和解决方案）",
+                "核心职责3（体现团队协作和领导力）"
+            ],
+            "technologies_stack": {{
+                "frontend": ["前端技术"],
+                "backend": ["后端技术"],
+                "database": ["数据库技术"],
+                "tools": ["开发工具"]
+            }},
+            "achievements_metrics": [
+                "量化成果1（更具体的性能提升数据）",
+                "量化成果2（业务增长和用户价值）",
+                "量化成果3（质量改进和创新突破）"
+            ],
+            "challenges_solutions": "遇到的挑战及解决方案（突出技术难点和创新思维）"
+        }}
+    ],
+    "education": [
+        {{
+            "institution": "学校名称",
+            "degree": "学位类型",
+            "major": "专业名称",
+            "location": "学校地点",
+            "duration": "就读时间",
+            "gpa": "GPA（如较高则展示）",
+            "relevant_coursework": ["相关课程1", "相关课程2"],
+            "academic_achievements": ["学术成就1", "学术成就2"],
+            "graduation_thesis": "毕业论文题目（如相关）"
+        }}
+    ],
+    "technical_skills": {{
+        "programming_languages": ["编程语言"],
+        "frameworks_libraries": ["框架和库"],
+        "databases": ["数据库技术"],
+        "cloud_platforms": ["云平台"],
+        "development_tools": ["开发工具"],
+        "methodologies": ["开发方法论"]
+    }},
+    "certifications": [
+        {{
+            "name": "证书名称",
+            "issuer": "颁发机构",
+            "date_obtained": "获得时间",
+            "validity": "有效期",
+            "credential_id": "证书编号（如有）"
+        }}
+    ],
+    "languages": [
+        {{
+            "language": "语言名称",
+            "proficiency": "熟练程度",
+            "certifications": "相关证书"
+        }}
+    ],
+    "professional_development": [
+        "持续学习活动1（突出新技术学习）",
+        "持续学习活动2（强化技术分享和影响力）",
+        "持续学习活动3（体现行业认知和前瞻性）"
+    ],
+    "additional_information": {{
+        "availability": "到岗时间",
+        "salary_expectation": "薪资期望（可选）",
+        "work_preference": "工作偏好（远程/现场/混合）",
+        "relocation_willingness": "是否愿意搬迁",
+        "travel_availability": "出差意愿"
+    }},
+    "customization_analysis": {{
+        "target_company": "{company_name}",
+        "target_position": "{job_title}",
+        "match_score": "预期提升的匹配分数",
+        "key_selling_points": [
+            "基于反馈优化的核心卖点1",
+            "基于反馈优化的核心卖点2", 
+            "基于反馈优化的核心卖点3"
+        ],
+        "differentiation_strategy": "针对反馈弱项的差异化优势重塑",
+        "cultural_fit_indicators": [
+            "文化契合点1（体现长期承诺）",
+            "文化契合点2（展现学习能力）",
+            "文化契合点3（突出适应性）"
+        ],
+        "growth_potential": "基于反馈的发展潜力重新阐述（突出在该职位的成长空间和贡献能力）",
+        "value_proposition": "针对弱项改进后的独特价值主张"
+    }}
+}}
+
+重要说明：
+- 只返回JSON格式的数据，不要包含任何其他文字说明
+- 不要使用```json```代码块标记
+- 确保JSON格式正确，所有字符串都用双引号包围
+- 所有字段都必须填写，不能为空
+- 必须基于真实信息进行优化，不可虚构事实
+- 针对HR反馈的每个弱项都要有相应的改进体现
+- 强化HR认可的每个优势点的表达
+- 整体提升与目标职位的匹配度
+
+请严格按照JSON格式返回优化后的简历内容：
+"""
+
+            # 调用LLM生成优化简历
+            start_time = time.time()
+            optimized_result = llm_service.call_phase2_model(optimization_prompt)
+            generation_time = time.time() - start_time
+            
+            logger.info(f"LLM optimization completed in {generation_time:.2f}s")
+            logger.debug(f"LLM response length: {len(optimized_result)} characters")
+            
+            # 解析JSON结果 - 更强健的解析逻辑
+            json_match = re.search(r'\{.*\}', optimized_result, re.DOTALL)
+            if json_match:
+                try:
+                    json_str = json_match.group()
+                    # 清理可能的额外字符
+                    json_str = json_str.strip()
+                    
+                    # 尝试解析JSON
+                    optimized_resume = json.loads(json_str)
+                    
+                    # 验证必要字段
+                    required_fields = [
+                        'personal_info', 'professional_summary', 'core_competencies',
+                        'highlighted_skills', 'professional_experience', 'key_projects',
+                        'education', 'technical_skills'
+                    ]
+                    
+                    missing_fields = []
+                    for field in required_fields:
+                        if field not in optimized_resume:
+                            missing_fields.append(field)
+                            # 使用原简历数据填补缺失字段
+                            optimized_resume[field] = resume_content.get(field, {} if field in ['personal_info', 'highlighted_skills', 'technical_skills', 'additional_information', 'customization_analysis'] else [])
+                    
+                    if missing_fields:
+                        logger.warning(f"Missing fields in optimized resume: {missing_fields}, filled with original data")
+                    
+                    # 确保关键字段不为空
+                    if not optimized_resume.get('professional_summary'):
+                        optimized_resume['professional_summary'] = resume_content.get('professional_summary', '专业且经验丰富的候选人，具备相关技能和经验。')
+                    
+                    logger.info("Resume optimization completed successfully")
+                    
+                    return {
+                        "success": True,
+                        "message": "简历优化完成",
+                        "data": {
+                            "content": optimized_resume,
+                            "optimization_summary": {
+                                "original_score": overall_score,
+                                "target_improvements": improvement_suggestions[:3],
+                                "optimization_focus": [
+                                    "强化技能匹配度展示",
+                                    "突出项目复杂度和影响力",
+                                    "展现职业稳定性和发展规划",
+                                    "增强团队协作和领导力体现"
+                                ],
+                                "expected_improvements": [
+                                    f"技能匹配度提升：针对{', '.join(strengths[:2]) if strengths else '核心技能'}进一步强化",
+                                    f"弱项改善：在{', '.join(weaknesses[:2]) if weaknesses else '关键领域'}方面重新包装表达",
+                                    "整体竞争力提升：预期评分提升10-15分"
+                                ]
+                            },
+                            "generation_time": generation_time,
+                            "optimization_type": "hr_feedback_based",
+                            "created_at": datetime.now().isoformat()
+                        }
+                    }
+                    
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse optimized resume JSON: {e}")
+                    logger.error(f"JSON content preview: {json_str[:500]}...")
+                    
+                    # 返回原简历作为备选方案
+                    return {
+                        "success": True,
+                        "message": "简历优化完成（使用备选方案）",
+                        "data": {
+                            "content": resume_content,  # 返回原简历
+                            "optimization_summary": {
+                                "original_score": overall_score,
+                                "target_improvements": improvement_suggestions[:3],
+                                "optimization_focus": ["技能匹配优化", "经验表述优化", "格式专业化"],
+                                "expected_improvements": ["基础优化已应用"],
+                                "note": "由于格式解析问题，返回了原始简历内容"
+                            },
+                            "generation_time": generation_time,
+                            "optimization_type": "fallback",
+                            "created_at": datetime.now().isoformat()
+                        }
+                    }
+            else:
+                logger.error("No valid JSON found in optimization result")
+                logger.error(f"LLM response preview: {optimized_result[:500]}...")
                 
-            # 根据反馈优化简历
-            optimized_resume = resume_content.copy()
-            
-            # 这里可以添加具体的优化逻辑
-            # 例如根据HR反馈调整内容重点
-            
-            return {
-                "optimized_resume": optimized_resume,
-                "optimization_notes": "已根据反馈进行优化",
-                "focus_areas": optimization_focus
-            }
-            
+                # 返回原简历作为备选方案
+                return {
+                    "success": True,
+                    "message": "简历优化完成（使用备选方案）",
+                    "data": {
+                        "content": resume_content,  # 返回原简历
+                        "optimization_summary": {
+                            "original_score": overall_score,
+                            "target_improvements": improvement_suggestions[:3],
+                            "optimization_focus": ["技能匹配优化", "经验表述优化", "格式专业化"],
+                            "expected_improvements": ["基础优化已应用"],
+                            "note": "由于响应格式问题，返回了原始简历内容"
+                        },
+                        "generation_time": generation_time,
+                        "optimization_type": "fallback",
+                        "created_at": datetime.now().isoformat()
+                    }
+                }
+                
         except Exception as e:
-            logger.error(f"Error optimizing resume: {e}")
-            return {"error": str(e)}
+            logger.error(f"Error optimizing resume content: {e}")
+            return {
+                "success": False,
+                "message": "简历优化过程中发生错误",
+                "error": str(e)
+            }
 
 class Phase3HRAgent:
     """Phase 3: HR simulation and feedback agent."""
@@ -2129,6 +2486,405 @@ class Phase3HRAgent:
         
         else:
             return f"根据{persona_name}的评估，该候选人当前得分{final_score}分，与{company_name}{job_title}的招聘要求存在较大差距。主要体现在专业技能、工作经验等核心维度上的不足。建议候选人进一步提升相关能力后再次申请，或者考虑其他更适合的职位机会。"
+        
+    
+    @staticmethod
+    def generate_self_introduction(strengths, weaknesses, min_length=300, resume_content=None, job_posting=None, hr_persona="experienced", hr_feedback=None):
+        """
+        根据HR反馈的优点与缺点，扬长避短，生成自我介绍（不少于min_length字）。
+        """
+        # 构建增强版prompt
+        prompt = f"""
+        你是一名求职者，请根据以下信息撰写一段不少于{min_length}字的个性化自我介绍：
+
+        ## 基础信息：
+        优点（可直接体现或强调）:
+        {', '.join(strengths) if strengths else '无'}
+
+        缺点（可转化为成长经历、改进方向或未来规划）:
+        {', '.join(weaknesses) if weaknesses else '无'}
+
+        ## 面试官类型：{hr_persona}
+        """
+        
+        # 添加简历内容信息
+        if resume_content:
+            prompt += f"""
+        ## 你的简历背景：
+        {json.dumps(resume_content, ensure_ascii=False, indent=2)}
+        """
+        
+        # 添加目标职位信息
+        if job_posting:
+            prompt += f"""
+        ## 目标职位：
+        {json.dumps(job_posting, ensure_ascii=False, indent=2)}
+        """
+        
+        # 添加HR反馈信息
+        if hr_feedback:
+            prompt += f"""
+        ## HR评估反馈：
+        {json.dumps(hr_feedback, ensure_ascii=False, indent=2)}
+        """
+        
+        prompt += f"""
+        ## 要求：
+        1. 结合优点和缺点，扬长避短，内容积极正面
+        2. 体现自我认知、成长经历、职业目标和对岗位的热情
+        3. 根据面试官类型调整表达风格和重点
+        4. 如有简历和职位信息，要体现匹配度和针对性
+        5. 语言流畅，结构完整，避免直接罗列优缺点
+        6. 字数不少于{min_length}字
+
+        请用第一人称中文输出一段自然流畅的自我介绍。
+        """
+
+        # 调用大模型生成
+        result = llm_service.call_phase3_model(prompt)
+        # 可根据实际情况做截断或后处理
+        return result.strip()
+
+    @staticmethod
+    def generate_interview_questions(hr_persona, resume_content, job_posting, num_questions=3):
+        """
+        根据HR人设、简历内容和职位信息生成面试问题
+        """
+        try:
+            logger.info(f"生成面试问题 - HR类型: {hr_persona}, 问题数量: {num_questions}")
+            
+            # 获取HR人设配置
+            persona_config = Phase3HRAgent.HR_PERSONAS.get(hr_persona, Phase3HRAgent.HR_PERSONAS["experienced"])
+            
+            # 构建prompt
+            prompt = f"""
+            你是一位{persona_config['name']}，{persona_config['description']}
+            
+            现在需要为以下候选人准备{num_questions}个面试问题：
+            
+            ## 职位信息：
+            {json.dumps(job_posting, ensure_ascii=False, indent=2)}
+            
+            ## 候选人简历：
+            {json.dumps(resume_content, ensure_ascii=False, indent=2)}
+            
+            ## 要求：
+            1. 根据你的HR人设特点，生成{num_questions}个具有针对性的面试问题
+            2. 问题应该能够深入了解候选人的能力、经验和匹配度
+            3. 问题类型要多样化：技能类、经验类、情境类、动机类等
+            4. 每个问题都要有明确的考查目的
+            
+            请返回JSON格式：
+            {{
+                "questions": [
+                    {{
+                        "id": 1,
+                        "question": "具体问题内容",
+                        "type": "问题类型",
+                        "purpose": "考查目的",
+                        "focus_area": "重点考查领域",
+                        "expected_duration": "预期回答时长（分钟）"
+                    }}
+                ]
+            }}
+            """
+            
+            # 调用大模型生成
+            result = llm_service.call_phase3_model(prompt)
+            
+            # 解析JSON结果
+            import re
+            json_match = re.search(r'\{.*\}', result, re.DOTALL)
+            if json_match:
+                try:
+                    questions_data = json.loads(json_match.group())
+                    questions = questions_data.get('questions', [])
+                    
+                    if not questions or len(questions) == 0:
+                        raise ValueError("生成的问题列表为空")
+                    
+                    logger.info(f"成功生成 {len(questions)} 个面试问题")
+                    
+                    return {
+                        "success": True,
+                        "message": f"成功生成{len(questions)}个面试问题",
+                        "data": {
+                            "questions": questions,
+                            "hr_persona": hr_persona,
+                            "total_questions": len(questions)
+                        }
+                    }
+                    
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON解析失败: {e}")
+                    logger.error(f"原始结果: {result}")
+                    
+                    # 备用方案：简单文本解析
+                    fallback_questions = Phase3HRAgent._parse_questions_fallback(result, num_questions)
+                    
+                    return {
+                        "success": True,
+                        "message": f"生成{len(fallback_questions)}个面试问题（使用备用解析）",
+                        "data": {
+                            "questions": fallback_questions,
+                            "hr_persona": hr_persona,
+                            "total_questions": len(fallback_questions)
+                        }
+                    }
+            else:
+                logger.error("未找到有效的JSON格式结果")
+                logger.error(f"原始结果: {result}")
+                
+                # 备用方案
+                fallback_questions = Phase3HRAgent._generate_fallback_questions(hr_persona, job_posting, num_questions)
+                
+                return {
+                    "success": True,
+                    "message": f"生成{len(fallback_questions)}个面试问题（使用备用模板）",
+                    "data": {
+                        "questions": fallback_questions,
+                        "hr_persona": hr_persona,
+                        "total_questions": len(fallback_questions)
+                    }
+                }
+                
+        except Exception as e:
+            logger.error(f"生成面试问题失败: {e}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"面试问题生成失败: {str(e)}",
+                "data": {}
+            }
+
+    @staticmethod
+    def evaluate_interview_answer(hr_persona, question, user_answer, resume_content, job_posting):
+        """
+        评估用户的面试回答并给出优化建议
+        """
+        try:
+            logger.info(f"评估面试回答 - HR类型: {hr_persona}")
+            
+            # 获取HR人设配置
+            persona_config = Phase3HRAgent.HR_PERSONAS.get(hr_persona, Phase3HRAgent.HR_PERSONAS["experienced"])
+            
+            # 构建prompt
+            prompt = f"""
+            你是一位{persona_config['name']}，{persona_config['description']}
+            
+            现在需要评估候选人对以下面试问题的回答：
+            
+            ## 面试问题：
+            问题：{question.get('question', '未知问题')}
+            考查目的：{question.get('purpose', '综合能力')}
+            重点领域：{question.get('focus_area', '通用')}
+            
+            ## 候选人回答：
+            {user_answer}
+            
+            ## 职位信息：
+            {json.dumps(job_posting, ensure_ascii=False, indent=2)}
+            
+            ## 候选人简历：
+            {json.dumps(resume_content, ensure_ascii=False, indent=2)}
+            
+            ## 评估要求：
+            1. 根据你的HR人设特点，专业评估这个回答
+            2. 给出具体的评分和详细分析
+            3. 提供具体的改进建议
+            4. 给出理想回答的要点
+            
+            请返回JSON格式：
+            {{
+                "overall_score": 75,
+                "evaluation": {{
+                    "content_relevance": 80,
+                    "depth_of_answer": 70,
+                    "communication_skill": 85,
+                    "job_match": 75
+                }},
+                "strengths": ["回答的优点1", "回答的优点2"],
+                "weaknesses": ["需要改进的地方1", "需要改进的地方2"],
+                "improvement_suggestions": [
+                    "具体改进建议1",
+                    "具体改进建议2"
+                ],
+                "ideal_answer_points": [
+                    "理想回答要点1",
+                    "理想回答要点2"
+                ],
+                "hr_comment": "作为{persona_config['name']}的专业评价和建议"
+            }}
+            """
+            
+            # 调用大模型生成
+            result = llm_service.call_phase3_model(prompt)
+            
+            # 解析JSON结果
+            import re
+            json_match = re.search(r'\{.*\}', result, re.DOTALL)
+            if json_match:
+                try:
+                    evaluation_data = json.loads(json_match.group())
+                    
+                    logger.info(f"面试回答评估完成，总分: {evaluation_data.get('overall_score', 0)}")
+                    
+                    return {
+                        "success": True,
+                        "message": "面试回答评估完成",
+                        "data": {
+                            "evaluation": evaluation_data,
+                            "question": question,
+                            "user_answer": user_answer,
+                            "hr_persona": hr_persona
+                        }
+                    }
+                    
+                except json.JSONDecodeError as e:
+                    logger.error(f"评估结果JSON解析失败: {e}")
+                    logger.error(f"原始结果: {result}")
+                    
+                    # 备用方案：基本评估
+                    fallback_evaluation = Phase3HRAgent._generate_fallback_evaluation(user_answer, question)
+                    
+                    return {
+                        "success": True,
+                        "message": "面试回答评估完成（使用备用评估）",
+                        "data": {
+                            "evaluation": fallback_evaluation,
+                            "question": question,
+                            "user_answer": user_answer,
+                            "hr_persona": hr_persona
+                        }
+                    }
+            else:
+                logger.error("评估结果未找到有效的JSON格式")
+                logger.error(f"原始结果: {result}")
+                
+                # 备用方案
+                fallback_evaluation = Phase3HRAgent._generate_fallback_evaluation(user_answer, question)
+                
+                return {
+                    "success": True,
+                    "message": "面试回答评估完成（使用备用评估）",
+                    "data": {
+                        "evaluation": fallback_evaluation,
+                        "question": question,
+                        "user_answer": user_answer,
+                        "hr_persona": hr_persona
+                    }
+                }
+                
+        except Exception as e:
+            logger.error(f"评估面试回答失败: {e}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"面试回答评估失败: {str(e)}",
+                "data": {}
+            }
+        
+    @staticmethod
+    def _parse_questions_fallback(result_text, num_questions):
+        """备用问题解析方法"""
+        questions = []
+        lines = result_text.split('\n')
+        
+        question_count = 0
+        current_question = None
+        
+        for line in lines:
+            line = line.strip()
+            if '问题' in line and ('：' in line or ':' in line):
+                if current_question:
+                    questions.append(current_question)
+                
+                question_text = line.split('：')[-1] if '：' in line else line.split(':')[-1]
+                current_question = {
+                    "id": question_count + 1,
+                    "question": question_text.strip(),
+                    "type": "综合问题",
+                    "purpose": "综合能力评估",
+                    "focus_area": "通用能力",
+                    "expected_duration": "3-5分钟"
+                }
+                question_count += 1
+                
+                if question_count >= num_questions:
+                    break
+        
+        if current_question and current_question not in questions:
+            questions.append(current_question)
+        
+        return questions[:num_questions]
+
+    @staticmethod
+    def _generate_fallback_questions(hr_persona, job_posting, num_questions):
+        """生成备用面试问题"""
+        job_title = job_posting.get('job_title', '未知职位')
+        
+        base_questions = [
+            {
+                "id": 1,
+                "question": f"请简单介绍一下自己，并说明为什么对{job_title}这个职位感兴趣？",
+                "type": "自我介绍类",
+                "purpose": "了解候选人基本情况和求职动机",
+                "focus_area": "个人背景",
+                "expected_duration": "3-5分钟"
+            },
+            {
+                "id": 2,
+                "question": "请描述一个你在工作中遇到的挑战，以及你是如何解决的？",
+                "type": "经验类",
+                "purpose": "评估问题解决能力",
+                "focus_area": "工作能力",
+                "expected_duration": "4-6分钟"
+            },
+            {
+                "id": 3,
+                "question": "你认为自己的优势是什么？有哪些地方需要提升？",
+                "type": "自我认知类",
+                "purpose": "了解自我认知能力",
+                "focus_area": "个人发展",
+                "expected_duration": "3-5分钟"
+            }
+        ]
+        
+        return base_questions[:num_questions]
+
+    @staticmethod
+    def _generate_fallback_evaluation(user_answer, question):
+        """生成备用评估结果"""
+        answer_length = len(user_answer)
+        
+        # 基于回答长度的简单评分
+        if answer_length > 200:
+            base_score = 75
+        elif answer_length > 100:
+            base_score = 65
+        else:
+            base_score = 55
+        
+        return {
+            "overall_score": base_score,
+            "evaluation": {
+                "content_relevance": base_score,
+                "depth_of_answer": base_score - 5,
+                "communication_skill": base_score + 5,
+                "job_match": base_score
+            },
+            "strengths": ["回答态度积极", "表达较为清晰"],
+            "weaknesses": ["可以更加详细", "建议提供更多具体例子"],
+            "improvement_suggestions": [
+                "建议在回答中提供更多具体的例子和数据",
+                "可以更好地将个人经验与岗位要求结合",
+                "表达可以更加结构化和逻辑清晰"
+            ],
+            "ideal_answer_points": [
+                "结合具体工作经验回答",
+                "展现与岗位相关的技能",
+                "体现解决问题的思路和方法"
+            ],
+            "hr_comment": "候选人的回答基本符合要求，建议进一步提升回答的深度和针对性。"
+        }
 
 
 class Phase4ScheduleAgent:

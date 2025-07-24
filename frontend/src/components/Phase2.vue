@@ -419,6 +419,10 @@
                   <el-tag :type="getResumeStatus(index) === 'generated' ? 'success' : 'info'" size="small">
                     {{ getResumeStatusText(index) }}
                   </el-tag>
+                  <!-- 优化标识 -->
+                  <el-tag v-if="getOptimizationCount(index) > 0" type="warning" size="small" style="margin-left: 8px;">
+                    已优化 {{ getOptimizationCount(index) }} 次
+                  </el-tag>
                 </div>
               </div>
             </template>
@@ -438,25 +442,178 @@
                   </el-button>
                   <el-button 
                     size="small" 
-                    type="warning"
-                    @click="optimizeResume(index)"
-                    :icon="Star"
-                  >
-                    优化简历
-                  </el-button>
-                  <el-button 
-                    size="small" 
                     type="info"
                     @click="editResume(index)"
                     :icon="User"
                   >
                     编辑简历
                   </el-button>
+                  <!-- 新增：查看优化历史按钮 -->
+                  <el-button 
+                    v-if="getOptimizationCount(index) > 0"
+                    size="small" 
+                    type="success"
+                    @click="showOptimizationHistory(index)"
+                    :icon="View"
+                  >
+                    优化历史 ({{ getOptimizationCount(index) }})
+                  </el-button>
                 </el-button-group>
               </div>
               
-              <!-- 简历内容显示 -->
-              <div v-if="generatedResumes[index]" class="resume-content-wrapper" :data-resume-index="index">
+              <!-- 优化历史标签页 -->
+              <div v-if="getOptimizationCount(index) > 0" class="optimization-tabs">
+                <el-tabs v-model="activeOptimizationTab[index]" type="card" style="margin-bottom: 20px;">
+                  <el-tab-pane label="当前简历" name="current">
+                    <div class="resume-content-wrapper" :data-resume-index="index">
+                      <ResumeDisplay 
+                        :resume-data="generatedResumes[index]" 
+                        :job-info="job"
+                        @edit="editResume(index)"
+                        @optimize="optimizeResume(index)"
+                      />
+                    </div>
+                  </el-tab-pane>
+                  <el-tab-pane label="原始简历" name="original">
+                    <div class="resume-content-wrapper">
+                      <ResumeDisplay 
+                        :resume-data="getOriginalResume(index)" 
+                        :job-info="job"
+                        :is-readonly="true"
+                      />
+                    </div>
+                  </el-tab-pane>
+                  <el-tab-pane 
+                    v-for="(optimization, optIndex) in getOptimizationHistoryForJob(index)" 
+                    :key="`opt-${optIndex}`"
+                    :label="`第${optIndex + 1}次优化`" 
+                    :name="`optimization-${optIndex}`"
+                  >
+                    <div class="optimization-info">
+                      <el-alert
+                        :title="`优化时间：${new Date(optimization.timestamp).toLocaleString()}`"
+                        :description="`基于HR评分 ${optimization.feedback?.feedback?.overall_score || 'N/A'} 分的反馈进行优化`"
+                        type="info"
+                        :closable="false"
+                        style="margin-bottom: 16px;"
+                      />
+                      
+                      <!-- 优化详细信息 -->
+                      <div class="optimization-details" style="margin-bottom: 20px;">
+                        <el-collapse>
+                          <el-collapse-item title="📝 本次优化的具体修改内容，可点击展开查看" name="modifications">
+                            <div class="optimization-summary">
+                              <!-- 优化重点 -->
+                              <div v-if="optimization.optimizationSummary?.optimization_focus" class="optimization-section">
+                                <h4>🎯 优化重点</h4>
+                                <ul>
+                                  <li v-for="focus in optimization.optimizationSummary.optimization_focus" :key="focus">
+                                    {{ focus }}
+                                  </li>
+                                </ul>
+                              </div>
+                              
+                              <!-- 主要改进 -->
+                              <div v-if="optimization.optimizationSummary?.expected_improvements" class="optimization-section">
+                                <h4>✨ 主要改进</h4>
+                                <ul>
+                                  <li v-for="improvement in optimization.optimizationSummary.expected_improvements" :key="improvement">
+                                    {{ improvement }}
+                                  </li>
+                                </ul>
+                              </div>
+                              
+                              <!-- 目标改进要点 -->
+                              <div v-if="optimization.optimizationSummary?.target_improvements" class="optimization-section">
+                                <h4>📈 目标改进要点</h4>
+                                <ul>
+                                  <li v-for="target in optimization.optimizationSummary.target_improvements" :key="target">
+                                    {{ target }}
+                                  </li>
+                                </ul>
+                              </div>
+                              
+                              <!-- 优化评分信息 -->
+                              <div v-if="optimization.optimizationSummary?.original_score" class="optimization-section">
+                                <h4>📊 优化评分信息</h4>
+                                <div class="stats-grid">
+                                  <div class="stat-item">
+                                    <span class="stat-label">优化前评分：</span>
+                                    <span class="stat-value">{{ optimization.optimizationSummary.original_score }}分</span>
+                                  </div>
+                                  <div v-if="optimization.feedback?.feedback?.overall_score" class="stat-item">
+                                    <span class="stat-label">HR反馈评分：</span>
+                                    <span class="stat-value">{{ optimization.feedback.feedback.overall_score }}分</span>
+                                  </div>
+                                  <div class="stat-item">
+                                    <span class="stat-label">优化类型：</span>
+                                    <span class="stat-value">{{ getOptimizationTypeName(optimization.optimizationSummary) }}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <!-- HR反馈要点 -->
+                              <div v-if="optimization.feedback?.feedback" class="optimization-section">
+                                <h4>💬 基于的HR反馈要点</h4>
+                                <div class="hr-feedback-summary">
+                                  <div v-if="optimization.feedback.feedback.improvement_suggestions" class="feedback-item">
+                                    <span class="feedback-label">改进建议：</span>
+                                    <ul>
+                                      <li v-for="suggestion in optimization.feedback.feedback.improvement_suggestions" :key="suggestion">
+                                        {{ suggestion }}
+                                      </li>
+                                    </ul>
+                                  </div>
+                                  <div v-if="optimization.feedback.feedback.missing_keywords" class="feedback-item">
+                                    <span class="feedback-label">缺失关键词：</span>
+                                    <el-tag 
+                                      v-for="keyword in optimization.feedback.feedback.missing_keywords" 
+                                      :key="keyword" 
+                                      size="small" 
+                                      type="warning"
+                                      style="margin: 2px;"
+                                    >
+                                      {{ keyword }}
+                                    </el-tag>
+                                  </div>
+                                  <div v-if="optimization.feedback.feedback.strengths" class="feedback-item">
+                                    <span class="feedback-label">简历优势：</span>
+                                    <ul>
+                                      <li v-for="strength in optimization.feedback.feedback.strengths" :key="strength">
+                                        {{ strength }}
+                                      </li>
+                                    </ul>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <!-- 无详细信息时的提示 -->
+                              <div v-if="!optimization.optimizationSummary" class="optimization-section">
+                                <el-alert
+                                  title="优化信息不完整"
+                                  description="此版本的优化记录缺少详细信息，但简历内容已根据HR反馈进行了相应调整。"
+                                  type="info"
+                                  :closable="false"
+                                />
+                              </div>
+                            </div>
+                          </el-collapse-item>
+                        </el-collapse>
+                      </div>
+                    </div>
+                    <div class="resume-content-wrapper">
+                      <ResumeDisplay 
+                        :resume-data="optimization.optimizedResume" 
+                        :job-info="job"
+                        :is-readonly="true"
+                      />
+                    </div>
+                  </el-tab-pane>
+                </el-tabs>
+              </div>
+              
+              <!-- 简历内容显示（无优化历史时） -->
+              <div v-else-if="generatedResumes[index]" class="resume-content-wrapper" :data-resume-index="index">
                 <ResumeDisplay 
                   :resume-data="generatedResumes[index]" 
                   :job-info="job"
@@ -977,7 +1134,7 @@
 <script>
 import { ref, reactive, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, User, View, Loading, Star } from '@element-plus/icons-vue'
 import { useAppStore } from '../store.js'
 import { apiService } from '../api.js'
@@ -1020,6 +1177,11 @@ export default {
     const generatedResumes = ref({}) // 存储生成的简历 {jobIndex: resumeData}
     const resumeStatus = ref({}) // 存储简历状态 {jobIndex: 'pending'|'generating'|'generated'|'error'}
     const activeResumeKeys = ref([]) // 控制折叠面板展开状态
+    
+    // 新增：优化历史相关状态
+    const optimizationHistory = ref({}) // 存储每个职位的优化历史 {jobIndex: [optimizations]}
+    const activeOptimizationTab = ref({}) // 控制每个职位的优化标签页 {jobIndex: 'current'|'original'|'optimization-0'}
+    const originalResumes = ref({}) // 存储原始简历 {jobIndex: resumeData}
     
     // 编辑相关状态
     const showEditMode = ref(false)
@@ -1066,12 +1228,73 @@ export default {
       ]
     }
     
-    // 页面加载时获取选择的职位
+    // 页面加载时获取选择的职位并检查是否从Phase3优化过来
     onMounted(() => {
+      // 检查是否从Phase3优化过来
+      const fromOptimization = localStorage.getItem('fromPhase3Optimization')
+      if (fromOptimization) {
+        console.log('检测到从Phase3优化返回，加载完整历史数据')
+        
+        // 加载用户信息
+        const savedProfile = localStorage.getItem('userProfile')
+        if (savedProfile) {
+          try {
+            const profileData = JSON.parse(savedProfile)
+            Object.assign(userProfile, profileData)
+            console.log('已加载保存的用户信息')
+          } catch (e) {
+            console.warn('加载用户信息失败:', e)
+          }
+        }
+        
+        // 处理优化数据
+        const optimizationData = JSON.parse(fromOptimization)
+        handleOptimizationFromPhase3(optimizationData)
+        
+        // 加载已生成的简历
+        loadExistingResumes()
+        
+        // 清除标识
+        localStorage.removeItem('fromPhase3Optimization')
+        return
+      }
+      
+      // 检查是否从Phase1进入（正常流程）
+      console.log('检测到从Phase1进入，清空历史数据开始新流程')
+      
+      // 清空用户表单数据（从Phase1进入时重新开始）
+      Object.assign(userProfile, {
+        full_name: '',
+        email: '',
+        phone: '',
+        location: '',
+        target_position: '',
+        summary: '',
+        skills: [],
+        experience: [],
+        education: [],
+        projects: [],
+        languages: '',
+        certifications: '',
+        special_requirements: ''
+      })
+      
+      // 清空简历相关数据
+      generatedResumes.value = {}
+      resumeStatus.value = {}
+      optimizationHistory.value = {}
+      originalResumes.value = {}
+      activeResumeKeys.value = []
+      
+      console.log('已清空表单和简历数据')
+      
+      // 加载选择的职位（从Phase1传来的）
       const selectedJobsStr = localStorage.getItem('selectedJobs')
       if (selectedJobsStr) {
         selectedJobs.value = JSON.parse(selectedJobsStr)
-        // 初始化简历状态
+        console.log('已加载从Phase1选择的职位:', selectedJobs.value.length, '个')
+        
+        // 初始化简历状态为待生成
         selectedJobs.value.forEach((_, index) => {
           resumeStatus.value[index] = 'pending'
         })
@@ -1080,7 +1303,156 @@ export default {
           activeJobIndex.value = 0
         }
       }
+      
+      // 设置自动保存机制（仅在用户开始编辑后保存）
+      const saveUserProfile = () => {
+        // 只有在用户有输入内容时才保存
+        if (userProfile.full_name || userProfile.email) {
+          localStorage.setItem('userProfile', JSON.stringify(userProfile))
+        }
+      }
+      
+      // 定时保存用户信息（每5秒保存一次）
+      setInterval(saveUserProfile, 5000)
+      
+      // 监听beforeunload事件确保离开页面时保存
+      window.addEventListener('beforeunload', saveUserProfile)
     })
+    
+    // 处理从Phase3优化过来的情况
+    const handleOptimizationFromPhase3 = (optimizationData) => {
+      try {
+        const { resumeId, feedback, optimizationData: data } = optimizationData
+        
+        // 显示优化成功信息
+        ElMessage.success('简历优化完成！可以对比查看原简历和优化后的简历')
+        
+        // 加载对应的职位信息
+        const selectedJobsStr = localStorage.getItem('selectedJobs')
+        if (selectedJobsStr) {
+          selectedJobs.value = JSON.parse(selectedJobsStr)
+        }
+        
+        // 加载原始简历
+        const originalResumeKey = `original_resume_${resumeId}`
+        const originalResumeStr = localStorage.getItem(originalResumeKey)
+        if (originalResumeStr) {
+          const originalData = JSON.parse(originalResumeStr)
+          
+          // 找到对应的简历索引
+          const resumeIndex = Object.keys(selectedJobs.value).find(index => 
+            selectedJobs.value[index].id === resumeId || index === resumeId
+          ) || resumeId
+          
+          // 保存原始简历
+          originalResumes.value[resumeIndex] = originalData.content
+          localStorage.setItem('originalResumes', JSON.stringify(originalResumes.value))
+          
+          // 保存优化历史
+          const optimizationRecord = {
+            timestamp: originalData.optimizationTime || new Date().toISOString(),
+            feedback: feedback,
+            optimizedResume: data.content,
+            optimizationSummary: data.optimization_summary || {},
+            originalScore: feedback.feedback?.overall_score || 0
+          }
+          
+          saveOptimizationHistory(resumeIndex, optimizationRecord)
+        }
+        
+        // 加载优化后的简历
+        const resumesStr = localStorage.getItem('generatedResumes')
+        if (resumesStr) {
+          const resumes = JSON.parse(resumesStr)
+          generatedResumes.value = resumes
+          
+          // 找到对应的简历索引
+          const resumeIndex = Object.keys(resumes).indexOf(resumeId)
+          if (resumeIndex >= 0) {
+            activeJobIndex.value = resumeIndex
+            
+            // 初始化优化标签页为当前简历
+            activeOptimizationTab.value[resumeIndex] = 'current'
+            
+            // 自动展开对应的简历
+            setTimeout(() => {
+              activeResumeKeys.value = [resumeIndex.toString()]
+            }, 500)
+          }
+        }
+        
+        // 加载优化历史
+        loadOptimizationHistory()
+        
+        // 加载原简历供对比 - 使用前面已声明的 originalResumeKey
+        const originalResumeStr2 = localStorage.getItem(originalResumeKey)
+        if (originalResumeStr2) {
+          const originalData2 = JSON.parse(originalResumeStr2)
+          
+          // 显示对比提示
+          setTimeout(() => {
+            ElMessageBox.confirm(
+              `简历已根据HR反馈进行优化。HR评分：${feedback.feedback?.overall_score || 'N/A'}分\n\n主要改进：\n${data.optimization_summary?.optimization_focus?.join('\n') || '多项优化'}\n\n是否要查看优化前后的对比？`,
+              '简历优化完成',
+              {
+                confirmButtonText: '查看对比',
+                cancelButtonText: '稍后再看',
+                type: 'success'
+              }
+            ).then(() => {
+              showOptimizationComparison(originalData2.content, generatedResumes.value[resumeId], data)
+            }).catch(() => {
+              // 用户选择稍后再看
+            })
+          }, 1000)
+        }
+        
+      } catch (error) {
+        console.error('处理Phase3优化数据失败:', error)
+        ElMessage.error('加载优化数据失败')
+      }
+    }
+    
+    // 显示优化对比的方法
+    const showOptimizationComparison = (originalResume, optimizedResume, optimizationData) => {
+      // 可以在这里实现对比界面，或者简单地显示优化信息
+      ElMessageBox.alert(
+        `优化完成！\n\n预期改进：\n${optimizationData.optimization_summary?.expected_improvements?.join('\n') || '多项改进'}\n\n您可以在简历列表中查看优化后的结果，并可随时重新提交给HR评估。`,
+        '优化详情',
+        {
+          confirmButtonText: '知道了',
+          type: 'success'
+        }
+      )
+    }
+    
+    // 加载已存在的简历
+    const loadExistingResumes = () => {
+      const resumesStr = localStorage.getItem('generatedResumes')
+      if (resumesStr) {
+        try {
+          const resumes = JSON.parse(resumesStr)
+          generatedResumes.value = resumes
+          
+          // 更新简历状态
+          Object.keys(resumes).forEach((key, index) => {
+            resumeStatus.value[index] = 'generated'
+          })
+          
+          // 如果有简历，自动展开第一个
+          if (Object.keys(resumes).length > 0) {
+            setTimeout(() => {
+              expandFirstResume()
+            }, 500)
+          }
+        } catch (error) {
+          console.error('加载简历数据失败:', error)
+        }
+      }
+      
+      // 加载优化历史
+      loadOptimizationHistory()
+    }
     
     // ============ 添加缺失的工作经验管理方法 ============
 
@@ -1270,6 +1642,13 @@ export default {
         }
         
         const successCount = Object.keys(generatedResumes.value).length
+        
+        // 🔥 批量生成完成后保存到localStorage
+        if (successCount > 0) {
+          localStorage.setItem('generatedResumes', JSON.stringify(generatedResumes.value))
+          console.log('批量生成完成，已保存', successCount, '份简历到localStorage')
+        }
+        
         ElMessage.success(`成功生成 ${successCount}/${total} 份简历`)
         
         // 自动展开第一个生成的简历
@@ -1318,6 +1697,10 @@ export default {
         if (result.success) {
           generatedResumes.value[jobIndex] = result.data.content
           resumeStatus.value[jobIndex] = 'generated'
+          
+          // 🔥 立即保存生成的简历到localStorage
+          localStorage.setItem('generatedResumes', JSON.stringify(generatedResumes.value))
+          console.log('已保存简历到localStorage')
           
           // 自动展开生成的简历 - 确保使用字符串作为键
           activeResumeKeys.value = [jobIndex.toString()]
@@ -3079,6 +3462,112 @@ export default {
       }
     }
 
+    // 新增：优化历史相关方法
+    const getOptimizationCount = (jobIndex) => {
+      return optimizationHistory.value[jobIndex]?.length || 0
+    }
+
+    const getOptimizationHistoryForJob = (jobIndex) => {
+      return optimizationHistory.value[jobIndex] || []
+    }
+
+    const getOriginalResume = (jobIndex) => {
+      return originalResumes.value[jobIndex] || generatedResumes.value[jobIndex]
+    }
+
+    const showOptimizationHistory = (jobIndex) => {
+      // 确保简历面板是展开的
+      if (!activeResumeKeys.value.includes(jobIndex.toString())) {
+        activeResumeKeys.value = [jobIndex.toString()]
+      }
+      
+      // 设置活跃标签页为原始简历，让用户可以看到标签页
+      activeOptimizationTab.value[jobIndex] = 'original'
+      
+      const history = getOptimizationHistoryForJob(jobIndex)
+      if (history.length > 0) {
+        ElMessage.info(`该简历共有 ${history.length} 次优化记录，请点击上方的标签页（当前简历、原始简历、第N次优化）查看各版本`)
+      } else {
+        ElMessage.warning('暂无优化历史记录')
+      }
+      
+      // 滚动到对应位置
+      setTimeout(() => {
+        const element = document.querySelector(`[data-resume-index="${jobIndex}"]`)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 300)
+    }
+
+    // 获取优化类型名称
+    const getOptimizationTypeName = (optimizationSummary) => {
+      if (!optimizationSummary) return '未知类型'
+      
+      const typeMap = {
+        'hr_feedback_based': 'HR反馈优化',
+        'skill_enhancement': '技能强化优化',
+        'keyword_optimization': '关键词优化',
+        'structure_improvement': '结构改进优化',
+        'content_refinement': '内容精炼优化'
+      }
+      
+      // 如果有明确的优化类型，返回对应名称
+      if (optimizationSummary.optimization_type) {
+        return typeMap[optimizationSummary.optimization_type] || optimizationSummary.optimization_type
+      }
+      
+      // 根据优化重点推断类型
+      const focus = optimizationSummary.optimization_focus || []
+      if (focus.some(f => f.includes('技能'))) {
+        return '技能强化优化'
+      } else if (focus.some(f => f.includes('关键词'))) {
+        return '关键词优化'
+      } else if (focus.some(f => f.includes('项目') || f.includes('经验'))) {
+        return '经验展示优化'
+      } else {
+        return 'HR反馈优化'
+      }
+    }
+
+    const saveOptimizationHistory = (jobIndex, optimizationData) => {
+      if (!optimizationHistory.value[jobIndex]) {
+        optimizationHistory.value[jobIndex] = []
+      }
+      optimizationHistory.value[jobIndex].push(optimizationData)
+      
+      // 保存到localStorage
+      localStorage.setItem('optimizationHistory', JSON.stringify(optimizationHistory.value))
+      
+      // 设置默认活跃标签页
+      if (!activeOptimizationTab.value[jobIndex]) {
+        activeOptimizationTab.value[jobIndex] = 'current'
+      }
+    }
+
+    const loadOptimizationHistory = () => {
+      try {
+        const historyStr = localStorage.getItem('optimizationHistory')
+        if (historyStr) {
+          optimizationHistory.value = JSON.parse(historyStr)
+        }
+        
+        const originalsStr = localStorage.getItem('originalResumes')
+        if (originalsStr) {
+          originalResumes.value = JSON.parse(originalsStr)
+        }
+        
+        // 初始化活跃标签页
+        selectedJobs.value.forEach((_, index) => {
+          if (!activeOptimizationTab.value[index]) {
+            activeOptimizationTab.value[index] = 'current'
+          }
+        })
+      } catch (e) {
+        console.error('加载优化历史失败:', e)
+      }
+    }
+
     return {
       store,
       userProfile,
@@ -3095,6 +3584,11 @@ export default {
       inputValue,
       skillInput,
       formRules,
+      
+      // 优化历史相关状态
+      optimizationHistory,
+      activeOptimizationTab,
+      originalResumes,
       
       // 编辑相关状态
       showEditMode,
@@ -3126,6 +3620,15 @@ export default {
       cancelEdit,
       proceedToPhase3,
       
+      // 优化历史相关方法
+      getOptimizationCount,
+      getOptimizationHistoryForJob,
+      getOriginalResume,
+      showOptimizationHistory,
+      saveOptimizationHistory,
+      loadOptimizationHistory,
+      getOptimizationTypeName,
+      
       // 添加的方法
       addExperience,
       removeExperience,
@@ -3151,6 +3654,9 @@ export default {
       loadDemoProfile,
 
       // 新增方法
+      handleOptimizationFromPhase3,
+      showOptimizationComparison,
+      loadExistingResumes,
       expandFirstResume,
       expandAllResumes,
       collapseAllResumes,
@@ -3423,6 +3929,102 @@ export default {
   .resume-edit-modal {
     width: 95% !important;
   }
+}
+
+/* 优化详情样式 */
+.optimization-details {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #e9ecef;
+}
+
+.optimization-summary {
+  color: #495057;
+}
+
+.optimization-section {
+  margin-bottom: 20px;
+}
+
+.optimization-section h4 {
+  margin: 0 0 12px 0;
+  color: #343a40;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.optimization-section ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style-type: disc;
+}
+
+.optimization-section li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+  color: #495057;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+}
+
+.stat-label {
+  font-weight: 500;
+  color: #6c757d;
+}
+
+.stat-value {
+  font-weight: bold;
+  color: #007bff;
+}
+
+.hr-feedback-summary {
+  background: #fff3cd;
+  border: 1px solid #ffeeba;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.feedback-item {
+  margin-bottom: 12px;
+}
+
+.feedback-item:last-child {
+  margin-bottom: 0;
+}
+
+.feedback-label {
+  font-weight: 600;
+  color: #856404;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.feedback-item ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.feedback-item li {
+  color: #856404;
+  margin-bottom: 4px;
 }
 </style>
 

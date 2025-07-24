@@ -159,49 +159,30 @@
         <!-- 最终日程展示 -->
         <div v-if="finalSchedule.length > 0" class="final-schedule-display">
           <h5>📅 您的面试日程表</h5>
-          
-          <!-- 日历展示 -->
-          <div class="calendar-container">
-            <el-calendar v-model="calendarValue" class="interview-calendar">
-              <template #date-cell="{ data }">
-                <div class="calendar-cell">
-                  <div class="date-number">{{ data.day.split('-').pop() }}</div>
-                  
-                  <!-- 检查当天是否有面试安排 -->
-                  <div v-for="interview in getInterviewsForDate(data.day)" :key="`${interview.job_title}-${interview.rank}`" class="interview-item">
-                    <el-tooltip 
-                      :content="`${interview.time_period} - ${interview.job_title} (${interview.company_name}) - 排名#${interview.rank}`"
-                      placement="top"
-                      effect="dark"
-                    >
-                      <div class="interview-dot" :class="`rank-${interview.rank}`">
-                        <span class="rank-text">#{{ interview.rank }}</span>
-                        <span class="job-short">{{ getShortJobTitle(interview.job_title) }}</span>
-                      </div>
-                    </el-tooltip>
-                  </div>
+          <el-timeline>
+            <el-timeline-item 
+              v-for="(schedule, index) in finalSchedule" 
+              :key="index"
+              :timestamp="schedule.date"
+              type="success"
+            >
+              <el-card class="schedule-item">
+                <div class="schedule-header">
+                  <h6>{{ schedule.job_title }}</h6>
+                  <el-tag type="success">排名 #{{ schedule.rank }}</el-tag>
                 </div>
-              </template>
-            </el-calendar>
-          </div>
+                <p><strong>公司：</strong>{{ schedule.company_name }}</p>
+                <p><strong>时间：</strong>{{ schedule.time_period }}</p>
+                <p><strong>推荐理由：</strong>{{ schedule.reason }}</p>
+              </el-card>
+            </el-timeline-item>
+          </el-timeline>
           
-          <!-- 日程详情列表 -->
-          <div class="schedule-details">
-            <h6>📋 面试详情列表</h6>
-            <el-table :data="finalSchedule" style="width: 100%" class="schedule-table">
-              <el-table-column prop="date" label="日期" width="120" />
-              <el-table-column prop="time_period" label="时间" width="150" />
-              <el-table-column prop="rank" label="排名" width="80" align="center">
-                <template #default="{ row }">
-                  <el-tag :type="getRankTagType(row.rank)" size="small">
-                    #{{ row.rank }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column prop="job_title" label="职位" />
-              <el-table-column prop="company_name" label="公司" />
-              <el-table-column prop="reason" label="推荐理由" show-overflow-tooltip />
-            </el-table>
+          <div class="schedule-actions">
+            <el-button @click="exportSchedule" type="primary" size="large">
+              <el-icon><Download /></el-icon>
+              导出日程表
+            </el-button>
           </div>
         </div>
       </div>
@@ -234,7 +215,6 @@ export default {
     const finalRanking = ref([])
     const finalSchedule = ref([])
     const finalAnalysisSummary = ref('')
-    const calendarValue = ref(new Date()) // 日历组件的当前值
     
     // 加载状态
     const generatingSlots = ref(false)
@@ -396,7 +376,7 @@ export default {
       
       try {
         const schedule = []
-        let currentDateOffset = 1 // 从明天开始安排
+        let currentDate = new Date()
         
         finalRanking.value.forEach((job, index) => {
           // 找到对应的时间表
@@ -405,39 +385,20 @@ export default {
           )
           
           if (jobTimeSlots && jobTimeSlots.available_slots.length > 0) {
-            // 为了避免时间冲突，为每个排名较高的职位安排不同的日期
-            const targetDateOffset = currentDateOffset + Math.floor(index / 2) // 每两个面试间隔一天
-            
-            // 找到一个合适的时间段，优先选择符合日期要求的
-            let selectedSlot = jobTimeSlots.available_slots.find(slot => slot.day_offset >= targetDateOffset)
-            
-            // 如果没找到合适的，就用第一个可用时间
-            if (!selectedSlot) {
-              selectedSlot = jobTimeSlots.available_slots[0]
-            }
-            
-            // 生成标准日期格式
-            const scheduleDate = new Date()
-            scheduleDate.setDate(scheduleDate.getDate() + (selectedSlot.day_offset || targetDateOffset))
+            // 选择第一个可用时间
+            const selectedSlot = jobTimeSlots.available_slots[0]
             
             schedule.push({
               rank: index + 1,
               job_title: job.job_title,
               company_name: job.company_name,
-              date: scheduleDate.toLocaleDateString('zh-CN'), // 使用标准的中文日期格式
+              date: selectedSlot.date,
               time_period: selectedSlot.time_period,
               score: job.score,
-              reason: job.reason,
-              dateObj: scheduleDate // 保留日期对象用于排序
+              reason: job.reason
             })
           }
         })
-        
-        // 按日期排序
-        schedule.sort((a, b) => a.dateObj - b.dateObj)
-        
-        // 移除临时的dateObj属性
-        schedule.forEach(item => delete item.dateObj)
         
         finalSchedule.value = schedule
         ElMessage.success('面试日程安排完成！')
@@ -472,50 +433,6 @@ export default {
       }
     }
     
-    // 日历相关方法
-    const getInterviewsForDate = (dateStr) => {
-      try {
-        // 将日历组件传入的日期字符串转换为本地日期格式
-        const calendarDate = new Date(dateStr)
-        const targetDateStr = calendarDate.toLocaleDateString('zh-CN')
-        
-        return finalSchedule.value.filter(interview => {
-          // 处理各种可能的日期格式
-          let interviewDateStr = interview.date
-          
-          // 如果是 YYYY/M/D 格式，转换为标准格式
-          if (interviewDateStr.includes('/')) {
-            const parts = interviewDateStr.split('/')
-            if (parts.length === 3) {
-              const year = parts[0]
-              const month = parts[1].padStart(2, '0')
-              const day = parts[2].padStart(2, '0')
-              const interviewDate = new Date(`${year}-${month}-${day}`)
-              interviewDateStr = interviewDate.toLocaleDateString('zh-CN')
-            }
-          }
-          
-          return interviewDateStr === targetDateStr
-        })
-      } catch (error) {
-        console.error('Error matching dates:', error)
-        return []
-      }
-    }
-    
-    const getRankTagType = (rank) => {
-      if (rank === 1) return 'danger'  // 红色 - 最高优先级
-      if (rank === 2) return 'warning' // 橙色 - 高优先级
-      if (rank === 3) return 'success' // 绿色 - 中等优先级
-      return 'info' // 蓝色 - 较低优先级
-    }
-    
-    const getShortJobTitle = (title) => {
-      if (!title) return ''
-      if (title.length <= 4) return title
-      return title.substring(0, 4) + '...'
-    }
-    
     // 组件挂载时加载数据
     onMounted(() => {
       loadDataFromPreviousPhases()
@@ -530,7 +447,6 @@ export default {
       finalRanking,
       finalSchedule,
       finalAnalysisSummary,
-      calendarValue,
       
       // 加载状态
       generatingSlots,
@@ -545,10 +461,7 @@ export default {
       generateTimeSlots,
       startRecommendationRanking,
       generateFinalSchedule,
-      exportSchedule,
-      getInterviewsForDate,
-      getRankTagType,
-      getShortJobTitle
+      exportSchedule
     }
   }
 }
@@ -718,135 +631,6 @@ export default {
 /* 最终日程样式 */
 .final-schedule-display {
   margin-top: 20px;
-}
-
-/* 日历样式 */
-.calendar-container {
-  margin-bottom: 30px;
-}
-
-.interview-calendar {
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.interview-calendar :deep(.el-calendar__header) {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 12px 12px 0 0;
-  padding: 20px;
-}
-
-.interview-calendar :deep(.el-calendar__title) {
-  color: white;
-  font-weight: bold;
-  font-size: 18px;
-}
-
-.interview-calendar :deep(.el-calendar__button-group) {
-  display: none;
-}
-
-.calendar-cell {
-  position: relative;
-  height: 100%;
-  min-height: 80px;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.date-number {
-  font-weight: bold;
-  color: #374151;
-  margin-bottom: 5px;
-}
-
-.interview-item {
-  margin-bottom: 3px;
-  width: 100%;
-}
-
-.interview-dot {
-  padding: 3px 6px;
-  border-radius: 12px;
-  font-size: 9px;
-  font-weight: bold;
-  text-align: center;
-  color: white;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  min-height: 16px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.interview-dot:hover {
-  transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.interview-dot.rank-1 {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-}
-
-.interview-dot.rank-2 {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-}
-
-.interview-dot.rank-3 {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-}
-
-.interview-dot.rank-4,
-.interview-dot.rank-5,
-.interview-dot.rank-6 {
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-}
-
-.rank-text {
-  font-size: 8px;
-  line-height: 1;
-  margin-right: 2px;
-}
-
-.job-short {
-  font-size: 8px;
-  line-height: 1;
-  opacity: 0.9;
-}
-
-/* 日程详情表格 */
-.schedule-details {
-  margin-top: 20px;
-  padding: 20px;
-  background: #f8fafc;
-  border-radius: 12px;
-}
-
-.schedule-details h6 {
-  margin: 0 0 15px 0;
-  color: #1f2937;
-  font-size: 16px;
-  font-weight: bold;
-}
-
-.schedule-table {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.schedule-table :deep(.el-table__header) {
-  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-}
-
-.schedule-table :deep(.el-table__row:hover > td) {
-  background: #f0f9ff !important;
 }
 
 .schedule-item {

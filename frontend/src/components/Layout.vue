@@ -107,7 +107,20 @@ export default {
         case 3:
           return store.resumes.list.length > 0
         case 4:
-          return store.hrFeedback.list.some(f => f.passes_screening)
+          // Phase 4: Check if Phase 3 has any evaluated resumes OR has passed resumes
+          const phase3Feedback = localStorage.getItem('phase3HRFeedback')
+          const passedResumes = localStorage.getItem('selectedJobsForPhase4')
+          
+          if (passedResumes && JSON.parse(passedResumes).length > 0) {
+            return true
+          }
+          
+          if (phase3Feedback) {
+            const feedbackData = JSON.parse(phase3Feedback)
+            return feedbackData.resumeList && feedbackData.resumeList.some(r => r.hrFeedback)
+          }
+          
+          return false
         default:
           return false
       }

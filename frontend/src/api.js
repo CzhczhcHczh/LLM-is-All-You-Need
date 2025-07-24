@@ -83,14 +83,14 @@ export const apiService = {
   // Phase 2 - Resume APIs (增强版本)
   generateResume(resumeData) {
     return api.post('/phase2/generate', resumeData,{
-      timeout: 90000
+      timeout: 120000
     })
   },
   
   // 批量生成简历
   generateBatchResumes(userData) {
     return api.post('/phase2/generate-batch', userData,{
-      timeout: 90000
+      timeout: 120000
     })
   },
   
@@ -102,46 +102,46 @@ export const apiService = {
     })
   },
   
-  // 优化简历
-  optimizeResume(resumeContent, feedback, optimizationFocus = []) {
+  // 原有的简历相关API
+  getResumes(userId) {
+    return api.get(`/phase2/resumes/${userId}`)
+  },
+
+  updateResume(resumeId, resumeData) {
+    return api.put(`/phase2/resumes/${resumeId}`, resumeData)
+  },
+
+  finalizeResume(resumeId) {
+    return api.post(`/phase2/resumes/${resumeId}/finalize`)
+  },
+
+  // 优化简历 - 支持多种参数格式的统一方法
+  async optimizeResume(resumeContent, feedback, optimizationFocus = []) {
     return api.post('/phase2/optimize', {
       resume_content: resumeContent,
       feedback: feedback,
       optimization_focus: optimizationFocus
     })
   },
-  
-  // 原有的简历相关API
-  getResumes(userId) {
-    return api.get(`/phase2/resumes/${userId}`)
-  },
-  
-  updateResume(resumeId, resumeData) {
-    return api.put(`/phase2/resumes/${resumeId}`, resumeData)
-  },
-  
-  finalizeResume(resumeId) {
-    return api.post(`/phase2/resumes/${resumeId}/finalize`)
-  },
-  
+
   // Phase 3 - HR Simulation APIs
   submitToHR(submissionData) {
     return api.post('/phase3/submit', submissionData)
   },
-  
+
   getHRFeedback(resumeId) {
     return api.get(`/phase3/feedback/${resumeId}`)
   },
-  
+
   requestHRReview(reviewData) {
     return api.post('/phase3/review', reviewData)
   },
-  
+
   // 更新的Phase 3 HR评估API
   async hrReview(reviewData) {
     return api.post('/phase3/hr-review', reviewData)  // 使用正确的路径
   },
-  
+
   async generateImprovementPlan(resumeContent, jobPosting, feedback, hrPersona) {
     return api.post('/phase3/improvement-plan', {
       resume_content: resumeContent,
@@ -150,24 +150,14 @@ export const apiService = {
       hr_persona: hrPersona
     })
   },
-  
+
   async applyImprovements(resumeContent, improvementPlan, selectedImprovements = null) {
     return api.post('/phase3/apply-improvements', {
       resume_content: resumeContent,
       improvement_plan: improvementPlan,
       selected_improvements: selectedImprovements
     })
-  },
-  
-  // Phase 2 简历相关APIs
-  async optimizeResume(resumeContent, feedback) {
-    return api.post('/phase2/optimize', {
-      resume_content: resumeContent,
-      feedback: feedback
-    })
-  },
-  
-  async regenerateResume(userProfile, jobPosting, optimizationHints = null) {
+  },  async regenerateResume(userProfile, jobPosting, optimizationHints = null) {
     return api.post('/phase2/regenerate', {
       user_profile: userProfile,
       job_posting: jobPosting,
@@ -206,7 +196,38 @@ export const apiService = {
   getAvailableModels() {
     return api.get('/models')
     },
-  
+  generateSelfIntroduction(strengths, weaknesses, minLength = 300, options = {}) {
+    return api.post('/phase3/self-introduction', {
+      strengths,
+      weaknesses,
+      min_length: minLength,
+      resume_content: options.resumeContent || null,
+      job_posting: options.jobPosting || null,
+      hr_persona: options.hrPersona || 'experienced',
+      hr_feedback: options.hrFeedback || null
+    })
+  },
+
+  // 面试问题生成
+  generateInterviewQuestions(hrPersona, resumeContent, jobPosting, numQuestions = 3) {
+    return api.post('/phase3/generate-interview-questions', {
+      hr_persona: hrPersona,
+      resume_content: resumeContent,
+      job_posting: jobPosting,
+      num_questions: numQuestions
+    })
+  },
+
+  // 面试回答评估
+  evaluateInterviewAnswer(hrPersona, question, userAnswer, resumeContent, jobPosting) {
+    return api.post('/phase3/evaluate-interview-answer', {
+      hr_persona: hrPersona,
+      question: question,
+      user_answer: userAnswer,
+      resume_content: resumeContent,
+      job_posting: jobPosting
+    })
+  },
   // HR评估提交方法 - 支持单份简历评估
   async submitHRReview(params) {
     try {

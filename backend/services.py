@@ -71,7 +71,13 @@ class LLMService:
             logger.error(f"Error calling model {model_name}: {e}")
             
             # 返回演示数据而不是错误信息
-            if "resume" in str(messages).lower() or "简历" in str(messages):
+            if "自我介绍" in str(messages) or "self_introduction" in str(messages):
+                return LLMService._get_demo_self_introduction()
+            elif "面试问题" in str(messages) or "interview" in str(messages).lower() or "generate_interview_questions" in str(messages):
+                return LLMService._get_demo_interview_questions()
+            elif "面试回答" in str(messages) or "evaluate_interview_answer" in str(messages):
+                return LLMService._get_demo_interview_evaluation()
+            elif "resume" in str(messages).lower() or "简历" in str(messages):
                 return LLMService._get_demo_resume_response()
             elif "search" in str(messages).lower() or "搜索" in str(messages):
                 return LLMService._get_demo_search_response()
@@ -166,6 +172,97 @@ class LLMService:
         }, ensure_ascii=False)
     
     @staticmethod
+    def _get_demo_self_introduction() -> str:
+        """返回演示自我介绍数据"""
+        import random
+        
+        # 生成多样化的自我介绍模板（无时间戳）
+        templates = [
+            "大家好，我是一名充满热情的专业人士。在我的职业生涯中，我特别擅长团队协作和问题解决，这些能力帮助我在工作中取得了不错的成果。虽然我在某些新兴技术方面还在持续学习中，但我将此视为自己成长的动力。我相信通过不断的努力和学习，我能够为团队带来更多价值。我期待能够在新的工作环境中发挥自己的专长，与优秀的同事一起创造更大的成就。感谢您的时间，期待进一步的交流机会。",
+            
+            "很高兴有机会向大家介绍自己。我是一个注重细节且富有创新精神的求职者，在项目管理和技术实施方面有着丰富的经验。我的同事们常常夸赞我的沟通能力和学习能力，这让我能够快速适应新的工作环境。虽然我在某些领域的经验可能还不够深入，但我已经制定了明确的学习计划来弥补这些不足。我希望能够加入一个充满活力的团队，与大家一起追求卓越，实现共同的目标。期待与您进一步探讨合作的可能性。",
+            
+            "我是一名对工作充满激情的候选人，特别在技术创新和团队领导方面表现突出。在过往的项目中，我积累了丰富的实战经验，能够独立承担重要任务并取得预期成果。我深知自己在某些新兴技术方面还需要继续学习，但我将此看作是职业发展的新机遇。我相信通过持续的自我提升和团队合作，我能够为公司创造更大的价值。我期待能够在新的平台上展现自己的能力，与团队一起迎接挑战，创造辉煌。感谢您的关注和支持。"
+        ]
+        
+        # 随机选择一个模板
+        return random.choice(templates)
+    
+    @staticmethod
+    def _get_demo_interview_questions() -> str:
+        """返回演示面试问题数据"""
+        return json.dumps({
+            "questions": [
+                {
+                    "id": 1,
+                    "question": "请简单介绍一下您的工作经历，重点说明与我们岗位相关的项目经验。",
+                    "type": "经验验证",
+                    "focus_area": "工作经验",
+                    "difficulty": "基础",
+                    "evaluation_criteria": "经验的相关性、深度和成果",
+                    "time_limit": "3-5分钟"
+                },
+                {
+                    "id": 2,
+                    "question": "在工作中遇到技术难题时，您通常采用什么方法来解决？请举一个具体的例子。",
+                    "type": "问题解决",
+                    "focus_area": "技术能力",
+                    "difficulty": "中等",
+                    "evaluation_criteria": "问题分析和解决思路",
+                    "time_limit": "4-6分钟"
+                },
+                {
+                    "id": 3,
+                    "question": "您对我们公司和这个职位有什么了解？为什么想要加入我们？",
+                    "type": "求职动机",
+                    "focus_area": "求职意愿",
+                    "difficulty": "基础",
+                    "evaluation_criteria": "对公司的了解程度和求职诚意",
+                    "time_limit": "3-4分钟"
+                }
+            ],
+            "interview_context": {
+                "hr_persona": "experienced",
+                "total_time": "12-18分钟",
+                "interview_goal": "全面评估候选人的岗位适配性",
+                "candidate_profile": "技术岗位候选人"
+            }
+        }, ensure_ascii=False)
+    
+    @staticmethod
+    def _get_demo_interview_evaluation() -> str:
+        """返回演示面试回答评估数据"""
+        return json.dumps({
+            "evaluation": {
+                "overall_score": 75,
+                "detailed_scores": {
+                    "relevance": 80,
+                    "depth": 70,
+                    "clarity": 85,
+                    "professionalism": 75
+                },
+                "strengths": [
+                    "回答思路清晰，逻辑性强",
+                    "能够结合具体例子说明问题",
+                    "表达简洁，重点突出"
+                ],
+                "areas_for_improvement": [
+                    "可以更深入地展示技术细节",
+                    "建议增加量化的成果描述",
+                    "可以展现更多的主动学习意识"
+                ],
+                "hr_comment": "回答整体表现良好，体现了较强的专业素养。建议在后续环节中更深入地展示技术深度。",
+                "follow_up_suggestions": [
+                    "请准备更多具体的技术实现细节",
+                    "可以提前想好如何量化您的工作成果",
+                    "建议了解更多行业发展趋势"
+                ]
+            },
+            "ideal_answer_example": "理想的回答应该包含：具体的问题背景、采用的解决方案、实施过程中的挑战、最终的成果和收获。建议结构化表达，先说问题，再说方法，最后说结果。"
+        }, ensure_ascii=False)
+    
+    
+    @staticmethod
     def _get_demo_generic_response() -> str:
         """返回通用演示数据"""
         return json.dumps({
@@ -190,7 +287,11 @@ class LLMService:
     def call_phase3_model(prompt: str) -> str:
         """Call Phase 3 model for HR simulation."""
         messages = [{"role": "user", "content": prompt}]
-        return LLMService.call_model(settings.phase3_model, messages)
+        # 如果是自我介绍相关的prompt，增加温度参数以提高多样性
+        if "自我介绍" in prompt or "self_introduction" in prompt:
+            return LLMService.call_model(settings.phase3_model, messages, temperature=0.9)
+        else:
+            return LLMService.call_model(settings.phase3_model, messages)
     
     @staticmethod
     def call_phase4_models(prompt: str) -> List[str]:

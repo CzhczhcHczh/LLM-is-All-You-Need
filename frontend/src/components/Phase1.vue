@@ -403,10 +403,15 @@ export default {
         return
       }
       
+      // 🔥 清除Phase3返回标识，确保从Phase1进入Phase2时清空历史数据
+      localStorage.removeItem('fromPhase3Optimization')
+      
       // 将选择的多个职位存储到localStorage，保持兼容性
       localStorage.setItem('selectedJobs', JSON.stringify(store.searchResults.selectedJobs))
       // 同时保存第一个职位作为默认选择，以兼容现有代码
       localStorage.setItem('selectedJob', JSON.stringify(store.searchResults.selectedJobs[0]))
+      
+      console.log('从Phase1进入Phase2，已选择', store.searchResults.selectedJobs.length, '个职位')
       
       store.setCurrentPhase(2)
       router.push('/phase2')

@@ -15,6 +15,7 @@ import time
 from database import get_db, create_user, get_user, UserCreate
 from agents import search_agent, phase2_agent, phase3_agent, phase4_agent
 from services import llm_service
+from agents import Phase3HRAgent
 
 # Create main router
 router = APIRouter()
@@ -266,27 +267,60 @@ async def generate_resume(request: ResumeGenerationRequest):
         )
 
 @router.post("/phase2/optimize", response_model=BaseResponse)
-async def optimize_resume(
-    resume_content: Dict[str, Any], 
-    feedback: Dict[str, Any],
-    optimization_focus: Optional[List[str]] = None
-):
-    """优化简历内容"""
+async def optimize_resume(request: dict):
+    """基于HR反馈优化简历内容"""
     try:
+        logger.info("Starting resume optimization request")
+        
+        resume_content = request.get("resume_content")
+        feedback = request.get("feedback")
+        optimization_focus = request.get("optimization_focus", [])
+        
+        logger.info(f"Request data - resume_content exists: {resume_content is not None}")
+        logger.info(f"Request data - feedback exists: {feedback is not None}")
+        logger.info(f"Request data - optimization_focus: {optimization_focus}")
+        
+        if not resume_content:
+            logger.error("Missing resume_content in request")
+            raise HTTPException(
+                status_code=400,
+                detail="resume_content is required"
+            )
+        
+        if not feedback:
+            logger.error("Missing feedback in request")
+            raise HTTPException(
+                status_code=400,
+                detail="feedback is required"
+            )
+        
+        logger.info("Calling phase2_agent.optimize_resume_content")
         result = phase2_agent.optimize_resume_content(
             resume_content, 
             feedback, 
-            optimization_focus or []
+            optimization_focus
         )
         
-        return BaseResponse(
-            success=True,
-            message="简历优化完成",
-            data=result
-        )
+        logger.info(f"Agent result - success: {result.get('success', False)}")
+        logger.info(f"Agent result - message: {result.get('message', 'No message')}")
         
+        if result.get("success", False):
+            return BaseResponse(
+                success=True,
+                message=result.get("message", "简历优化完成"),
+                data=result.get("data", result)
+            )
+        else:
+            logger.error(f"Agent optimization failed: {result.get('message', 'Unknown error')}")
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("message", "简历优化失败")
+            )
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error optimizing resume: {e}")
+        logger.error(f"Error optimizing resume: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"简历优化失败: {str(e)}"
@@ -730,3 +764,167 @@ async def generate_batch_resumes(request: dict):
             detail=f"批量生成简历失败: {str(e)}"
         )
 
+from fastapi import Body
+
+@router.post("/phase3/self-introduction", response_model=BaseResponse)
+async def generate_self_introduction(
+    strengths: List[str] = Body(..., embed=True),
+    weaknesses: List[str] = Body(..., embed=True),
+    min_length: int = Body(300, embed=True),
+    resume_content: Optional[Dict[str, Any]] = Body(None, embed=True),
+    job_posting: Optional[Dict[str, Any]] = Body(None, embed=True),
+    hr_persona: Optional[str] = Body("experienced", embed=True),
+    hr_feedback: Optional[Dict[str, Any]] = Body(None, embed=True)
+):
+    """
+    根据简历内容、HR评估结果和HR性格生成个性化自我介绍
+    """
+    try:
+        logger.info(f"生成个性化自我介绍请求 - HR类型: {hr_persona}, 优势: {strengths}, 劣势: {weaknesses}")
+        
+        # 验证输入参数
+        if not strengths and not weaknesses:
+            return BaseResponse(
+                success=False,
+                message="请提供至少一个优势或劣势信息",
+                data={}
+            )
+        
+        # 调用增强版自我介绍生成
+        intro = Phase3HRAgent.generate_self_introduction(
+            strengths=strengths, 
+            weaknesses=weaknesses, 
+            min_length=min_length,
+            resume_content=resume_content,
+            job_posting=job_posting,
+            hr_persona=hr_persona,
+            hr_feedback=hr_feedback
+        )
+        
+        logger.info(f"个性化自我介绍生成成功，长度: {len(intro)}")
+        
+        return BaseResponse(
+            success=True,
+            message="个性化自我介绍生成成功",
+            data={
+                "self_introduction": intro,
+                "length": len(intro),
+                "personalization": {
+                    "hr_persona": hr_persona,
+                    "based_on_resume": resume_content is not None,
+                    "based_on_job": job_posting is not None,
+                    "based_on_feedback": hr_feedback is not None
+                },
+                "generation_context": {
+                    "strengths": strengths,
+                    "weaknesses": weaknesses,
+                    "target_job": job_posting.get('job_title') if job_posting else None,
+                    "target_company": job_posting.get('company_name') if job_posting else None
+                }
+            }
+        )
+    except Exception as e:
+        logger.error(f"生成自我介绍失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"自我介绍生成失败: {str(e)}"
+        )
+
+@router.post("/phase3/generate-interview-questions", response_model=BaseResponse)
+async def generate_interview_questions(
+    hr_persona: str = Body(..., embed=True),
+    resume_content: Dict[str, Any] = Body(..., embed=True),
+    job_posting: Dict[str, Any] = Body(..., embed=True),
+    num_questions: int = Body(3, embed=True)
+):
+    """
+    根据HR人设和用户简历生成面试问题
+    """
+    try:
+        logger.info(f"生成面试问题请求 - HR类型: {hr_persona}, 问题数量: {num_questions}")
+        
+        # 验证输入参数
+        if not hr_persona:
+            return BaseResponse(
+                success=False,
+                message="请选择HR类型",
+                data={}
+            )
+        
+        if not resume_content:
+            return BaseResponse(
+                success=False,
+                message="请提供简历内容",
+                data={}
+            )
+        
+        # 调用agent生成面试问题 
+        result = Phase3HRAgent.generate_interview_questions(
+            hr_persona=hr_persona,
+            resume_content=resume_content,
+            job_posting=job_posting,
+            num_questions=num_questions
+        )
+        
+        logger.info(f"面试问题生成完成")
+        
+        return BaseResponse(
+            success=result["success"],
+            message=result["message"],
+            data=result["data"]
+        )
+        
+    except Exception as e:
+        logger.error(f"生成面试问题失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"面试问题生成失败: {str(e)}"
+        )
+
+@router.post("/phase3/evaluate-interview-answer", response_model=BaseResponse)
+async def evaluate_interview_answer(
+    hr_persona: str = Body(..., embed=True),
+    question: Dict[str, Any] = Body(..., embed=True),
+    user_answer: str = Body(..., embed=True),
+    resume_content: Dict[str, Any] = Body(..., embed=True),
+    job_posting: Dict[str, Any] = Body(..., embed=True)
+):
+    """
+    评估用户的面试回答并给出优化建议
+    """
+    try:
+        logger.info(f"评估面试回答请求 - HR类型: {hr_persona}, 问题ID: {question.get('id', 'N/A')}")
+        logger.debug(f"用户回答长度: {len(user_answer) if user_answer else 0}")
+        
+        # 验证输入参数
+        if not hr_persona or not question or not user_answer:
+            logger.warning(f"参数验证失败 - hrPersona: {bool(hr_persona)}, question: {bool(question)}, userAnswer: {bool(user_answer)}")
+            return BaseResponse(
+                success=False,
+                message="请提供完整的评估信息",
+                data={}
+            )
+        
+        # 调用agent评估回答
+        result = Phase3HRAgent.evaluate_interview_answer(
+            hr_persona=hr_persona,
+            question=question,
+            user_answer=user_answer,
+            resume_content=resume_content,
+            job_posting=job_posting
+        )
+        
+        logger.info(f"面试回答评估完成 - 成功: {result.get('success', False)}")
+        
+        return BaseResponse(
+            success=result["success"],
+            message=result["message"],
+            data=result["data"]
+        )
+        
+    except Exception as e:
+        logger.error(f"评估面试回答失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"面试回答评估失败: {str(e)}"
+        )
