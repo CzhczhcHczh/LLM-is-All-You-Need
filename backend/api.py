@@ -589,6 +589,56 @@ async def optimize_schedule(request: SchedulingRequest):
             detail="Schedule optimization failed"
         )
 
+@router.post("/phase4/multi-llm-recommendation", response_model=BaseResponse)
+async def multi_llm_recommendation(request: dict):
+    """Multi-LLM job recommendation analysis."""
+    try:
+        personal_info = request.get("personal_info", {})
+        jobs = request.get("jobs", [])
+        
+        if not jobs:
+            raise HTTPException(
+                status_code=400,
+                detail="职位列表不能为空"
+            )
+        
+        result = phase4_agent.multi_llm_recommendation(personal_info, jobs)
+        
+        return BaseResponse(
+            success=True,
+            message="多LLM推荐分析完成",
+            data=result
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in multi-LLM recommendation: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"多LLM推荐分析失败: {str(e)}"
+        )
+
+@router.post("/phase4/multi-agent-discussion", response_model=BaseResponse)
+async def multi_agent_discussion_complete(request: SchedulingRequest):
+    """Complete multi-agent discussion workflow including ranking and scheduling."""
+    try:
+        # 调用完整的 Phase4 工作流程
+        result = phase4_agent.multi_agent_discussion(
+            interviews=request.interviews,
+            user_preferences=request.user_preferences
+        )
+        
+        return BaseResponse(
+            success=result["success"],
+            message=result["message"],
+            data=result["data"]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in complete multi-agent discussion: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"完整多Agent讨论失败: {str(e)}"
+        )
 
 # Health check and utility APIs
 @router.get("/health", response_model=BaseResponse)

@@ -1,5 +1,6 @@
 import json
 import time
+import re
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from loguru import logger
@@ -130,28 +131,103 @@ class Phase4ScheduleAgent:
 
     @staticmethod
     def _generate_mock_ranking_response(jobs: List[Dict[str, Any]], perspective: str, seed: int) -> Dict[str, Any]:
-        """生成模拟的LLM排序响应"""
+        """生成模拟的LLM排序响应，包含详细的分析理由"""
         random.seed(seed)
         rankings = []
         
+        # 不同视角的分析师信息
+        analyst_info = {
+            "技术专家视角": {
+                "name": "李技术",
+                "title": "高级技术专家",
+                "experience": "8年技术团队管理经验",
+                "focus_areas": ["技术栈匹配", "项目经验", "技术发展前景", "团队协作能力"]
+            },
+            "HR招聘视角": {
+                "name": "王人事", 
+                "title": "资深HR经理",
+                "experience": "10年招聘管理经验",
+                "focus_areas": ["文化匹配", "沟通能力", "职业稳定性", "薪资合理性"]
+            },
+            "职业规划师视角": {
+                "name": "张规划",
+                "title": "职业发展顾问", 
+                "experience": "6年职业咨询经验",
+                "focus_areas": ["职业发展路径", "成长空间", "行业前景", "个人目标匹配"]
+            }
+        }
+        
         for i, job in enumerate(jobs):
-            # 根据不同视角生成不同的评分
-            base_score = random.randint(60, 95)
+            # 根据不同视角生成不同的评分和理由
+            base_score = random.randint(65, 90)
+            detailed_reason = ""
+            
             if perspective == "技术专家视角":
                 # 技术专家更关注技术栈匹配
-                if any(skill in str(job.get('skills', [])) for skill in ['Python', 'Java', 'React', 'Vue']):
-                    base_score += 5
+                tech_bonus = 0
+                if any(skill in str(job.get('skills', [])) for skill in ['Python', 'Java', 'React', 'Vue', 'JavaScript']):
+                    tech_bonus = 8
+                    detailed_reason = f"该职位的技术栈与您的技能高度匹配，特别是{', '.join([s for s in ['Python', 'Java', 'React', 'Vue'] if s in str(job.get('skills', []))])}等核心技术。"
+                else:
+                    detailed_reason = "该职位需要的技术栈与您当前技能有一定差距，但通过学习可以快速适应。"
+                
+                if job.get('company_name') in ['阿里巴巴', '腾讯', '字节跳动', '百度', '美团']:
+                    tech_bonus += 5
+                    detailed_reason += "公司技术实力强，能提供良好的技术成长环境。"
+                
+                base_score += tech_bonus
+                
             elif perspective == "HR招聘视角":
                 # HR更关注软技能和文化匹配
-                if job.get('company_name') in ['阿里巴巴', '腾讯', '字节跳动']:
-                    base_score += 8
+                hr_bonus = 0
+                if job.get('company_name') in ['阿里巴巴', '腾讯', '字节跳动', '百度']:
+                    hr_bonus = 10
+                    detailed_reason = "知名企业，具有完善的培训体系和职业发展通道，企业文化开放包容。"
+                else:
+                    detailed_reason = "公司规模适中，工作氛围相对轻松，有利于快速融入团队。"
+                
+                # 薪资范围评估
+                salary = job.get('salary_range', '')
+                if any(x in salary for x in ['20k', '25k', '30k']):
+                    hr_bonus += 5
+                    detailed_reason += "薪资待遇具有竞争力，符合市场水平。"
+                
+                base_score += hr_bonus
+                
+            elif perspective == "职业规划师视角":
+                # 职业规划师关注发展前景
+                career_bonus = 0
+                
+                # 职位级别评估
+                if any(level in job.get('job_title', '') for level in ['高级', '资深', '专家', '主管']):
+                    career_bonus = 8
+                    detailed_reason = "该职位层级较高，有利于职业发展和技能提升，未来晋升空间较大。"
+                else:
+                    detailed_reason = "该职位是很好的起点，能够积累相关经验，为未来发展打好基础。"
+                
+                # 行业前景评估
+                if job.get('company_name') in ['字节跳动', '腾讯', '阿里巴巴']:
+                    career_bonus += 6
+                    detailed_reason += "所在行业前景良好，公司发展稳定，职业发展机会较多。"
+                
+                base_score += career_bonus
             
+            # 确保评分不超过100
+            final_score = min(100, base_score)
+            # 理由截断为50字以内
+            short_reason = detailed_reason[:50] if detailed_reason else f"从{perspective}分析，该职位综合匹配度较高"
             rankings.append({
                 "job_index": i,
                 "company_name": job.get('company_name', ''),
                 "position": job.get('job_title', ''),
-                "recommendation_score": min(100, base_score),
-                "ranking_reason": f"从{perspective}分析，该职位匹配度较高"
+                "recommendation_score": final_score,
+                "ranking_reason": short_reason,
+                "detailed_scores": {
+                    "技能匹配度": random.randint(70, 95),
+                    "发展前景": random.randint(65, 90), 
+                    "薪资待遇": random.randint(60, 95),
+                    "公司声誉": random.randint(70, 100)
+                }
             })
         
         # 按评分排序
@@ -159,7 +235,8 @@ class Phase4ScheduleAgent:
         
         return {
             "rankings": rankings,
-            "analysis_perspective": perspective
+            "analysis_perspective": perspective,
+            "analyst_info": analyst_info.get(perspective, {})
         }
 
     @staticmethod
@@ -219,7 +296,7 @@ class Phase4ScheduleAgent:
         available_slots: Dict[str, List[str]], 
         user_preferences: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """生成最终面试日程安排"""
+        """生成最终面试日程安排，增加扁平化 interviews 字段，便于前端展示"""
         try:
             logger.info("Generating final interview schedule")
             
@@ -271,14 +348,25 @@ class Phase4ScheduleAgent:
             # 调用LLM服务生成日程
             try:
                 schedule_responses = llm_service.call_phase4_models(schedule_prompt)
+                print(schedule_responses)
                 if schedule_responses and len(schedule_responses) > 0:
                     schedule_result = json.loads(schedule_responses[0])
+                    
                 else:
-                    # LLM调用失败，使用mock数据
                     schedule_result = Phase4ScheduleAgent._generate_mock_schedule(ranked_jobs, available_slots, user_preferences)
             except Exception as e:
                 logger.warning(f"LLM schedule generation failed: {e}, using mock data")
                 schedule_result = Phase4ScheduleAgent._generate_mock_schedule(ranked_jobs, available_slots, user_preferences)
+            
+            # 增加扁平化 interviews 列表
+            flat_interviews = []
+            for day in schedule_result.get("schedule", []):
+                date = day.get("date")
+                for interview in day.get("interviews", []):
+                    flat_item = interview.copy()
+                    flat_item["date"] = date
+                    flat_interviews.append(flat_item)
+            schedule_result["flat_interviews"] = flat_interviews
             
             return {
                 "success": True,
@@ -296,58 +384,62 @@ class Phase4ScheduleAgent:
 
     @staticmethod
     def _generate_mock_schedule(ranked_jobs: List[Dict[str, Any]], available_slots: Dict[str, List[str]], user_preferences: Dict[str, Any]) -> Dict[str, Any]:
-        """生成模拟的面试日程"""
+        """生成更健壮的模拟面试日程，保证可用"""
         schedule = []
         used_slots = set()
         max_per_day = user_preferences.get('max_interviews_per_day', 2)
-        
+        if not ranked_jobs:
+            return {
+                "schedule": [],
+                "schedule_summary": {
+                    "total_interviews": 0,
+                    "schedule_span_days": 0,
+                    "average_interviews_per_day": 0,
+                    "optimization_notes": "无可安排职位"
+                }
+            }
         # 按推荐排序安排面试
         current_date = None
         interviews_today = 0
-        
         for i, job in enumerate(ranked_jobs[:5]):  # 最多安排前5个职位
-            company_key = f"company_{job['job_index']}"
+            company_key = f"company_{job.get('job_index', i)}"
             available = available_slots.get(company_key, [])
-            
             # 找到可用的时间段
             selected_slot = None
             for slot in available:
                 if slot not in used_slots:
                     slot_date = slot.split()[0]
-                    
                     # 检查当天面试数量
                     if slot_date != current_date:
                         current_date = slot_date
                         interviews_today = 0
-                    
                     if interviews_today < max_per_day:
                         selected_slot = slot
                         used_slots.add(slot)
                         interviews_today += 1
                         break
-            
-            if selected_slot:
-                date_part = selected_slot.split()[0]
-                time_part = selected_slot.split()[1]
-                
-                # 找到对应日期的记录或创建新记录
-                date_record = next((item for item in schedule if item["date"] == date_part), None)
-                if not date_record:
-                    date_record = {"date": date_part, "interviews": []}
-                    schedule.append(date_record)
-                
-                date_record["interviews"].append({
-                    "time": time_part,
-                    "company_name": job['company_name'],
-                    "position": job['position'],
-                    "priority_rank": job['final_rank'],
-                    "recommendation_score": job['final_recommendation_score'],
-                    "preparation_tips": f"重点准备{job['position']}相关技能展示"
-                })
-        
+            # 如果没有可用slot，自动分配一个mock时间
+            if not selected_slot:
+                mock_date = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
+                mock_time = "09:00-12:00"
+                selected_slot = f"{mock_date} {mock_time}"
+            date_part = selected_slot.split()[0]
+            time_part = selected_slot.split()[1]
+            # 找到对应日期的记录或创建新记录
+            date_record = next((item for item in schedule if item["date"] == date_part), None)
+            if not date_record:
+                date_record = {"date": date_part, "interviews": []}
+                schedule.append(date_record)
+            date_record["interviews"].append({
+                "time": time_part,
+                "company_name": job.get('company_name', ''),
+                "position": job.get('position', job.get('job_title', '')),
+                "priority_rank": job.get('final_rank', i+1),
+                "recommendation_score": job.get('final_recommendation_score', job.get('score', 80)),
+                "preparation_tips": f"重点准备{job.get('position', job.get('job_title', ''))}相关技能展示"
+            })
         # 按日期排序
         schedule.sort(key=lambda x: x["date"])
-        
         return {
             "schedule": schedule,
             "schedule_summary": {
@@ -444,88 +536,220 @@ class Phase4ScheduleAgent:
     
     @staticmethod
     def multi_llm_recommendation(personal_info: Dict[str, Any], jobs: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Multi-LLM job recommendation analysis."""
+        """Multi-LLM job recommendation analysis with detailed reasoning."""
         try:
-            # 模拟三个不同的LLM分析师
-            llm_analysts = [
+            logger.info(f"Starting multi-LLM recommendation for {len(jobs)} jobs")
+            
+            # 定义三个不同角度的分析师
+            analysts = [
                 {
-                    "llm_name": "技术专家分析师",
-                    "focus": "技能匹配度和技术发展前景"
+                    "id": "tech_expert",
+                    "name": "技术专家分析师",
+                    "perspective": "技术专家视角", 
+                    "focus": "技能匹配度和技术发展前景",
+                    "weight": 1.2  # 技术专家权重稍高
                 },
                 {
-                    "llm_name": "职业规划分析师", 
-                    "focus": "职业发展路径和成长空间"
+                    "id": "hr_specialist", 
+                    "name": "HR招聘专家",
+                    "perspective": "HR招聘视角",
+                    "focus": "文化匹配和团队适应性",
+                    "weight": 1.0
                 },
                 {
-                    "llm_name": "综合评估分析师",
-                    "focus": "工作环境和企业文化匹配"
+                    "id": "career_planner",
+                    "name": "职业规划师",
+                    "perspective": "职业规划师视角",
+                    "focus": "职业发展路径和成长空间", 
+                    "weight": 1.1
                 }
             ]
             
             llm_analysis = []
             all_rankings = []
             
-            # 每个LLM分析师独立评分
-            for analyst in llm_analysts:
-                # 这里应该调用真实的LLM，暂时使用mock数据
-                analyst_result = {
-                    "analyst": analyst["llm_name"],
-                    "focus": analyst["focus"],
-                    "rankings": []
-                }
-                
-                for i, job in enumerate(jobs):
-                    score = random.randint(70, 95)
-                    analyst_result["rankings"].append({
-                        "job_index": i,
-                        "job_title": job.get("job_title", ""),
-                        "company": job.get("company_name", ""),
-                        "score": score,
-                        "reason": f"基于{analyst['focus']}的分析评分"
-                    })
-                
-                llm_analysis.append(analyst_result)
-                all_rankings.extend(analyst_result["rankings"])
+            # 构建LLM分析提示
+            analysis_prompt_template = """
+            请作为{perspective}，分析以下候选人与职位的匹配情况：
             
-            # 综合分析师整合三个LLM的结果
+            候选人信息：
+            {personal_info}
+            
+            职位信息：
+            {job_info}
+            
+            请从{focus}的角度，为每个职位打分并给出详细理由。
+            
+            请严格按照以下JSON格式返回：
+            {{
+                "analyst_info": {{
+                    "name": "您的分析师姓名",
+                    "perspective": "{perspective}",
+                    "focus_areas": ["关注点1", "关注点2", "关注点3"]
+                }},
+                "job_analysis": [
+                    {{
+                        "job_index": 0,
+                        "job_title": "职位名称",
+                        "company_name": "公司名称",
+                        "score": 85,
+                        "detailed_scores": {{
+                            "技能匹配度": 90,
+                            "发展前景": 85,
+                            "薪资待遇": 80,
+                            "公司声誉": 88
+                        }},
+                        "analysis_reason": "详细的分析理由，解释为什么给出这个分数，要求：
+            - 语言简洁专业
+            - 突出关键信息
+            - 提供实用建议
+            - 字数控制在50字以内"
+                    }}
+                ]
+            }}
+            """
+            
+            # 为每个分析师生成分析结果
+            for analyst in analysts:
+                try:
+                    # 准备提示文本
+                    prompt = analysis_prompt_template.format(
+                        perspective=analyst["perspective"],
+                        focus=analyst["focus"],
+                        personal_info=json.dumps(personal_info, ensure_ascii=False, indent=2),
+                        job_info=json.dumps(jobs, ensure_ascii=False, indent=2)
+                    )
+                    
+                    # 调用LLM服务
+                    llm_response = None
+                    try:
+                        responses = llm_service.call_phase4_models(prompt)
+                        if responses and len(responses) > 0:
+                            # 尝试解析第一个响应
+                            response_text = responses[0]
+                            # 提取JSON部分
+                            import re
+                            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                            if json_match:
+                                llm_response = json.loads(json_match.group())
+                    except Exception as e:
+                        logger.warning(f"LLM call failed for {analyst['name']}: {e}")
+                    
+                    # 如果LLM调用失败，使用mock数据
+                    if not llm_response:
+                        mock_data = Phase4ScheduleAgent._generate_mock_ranking_response(
+                            jobs, analyst["perspective"], hash(analyst["id"]) % 1000
+                        )
+                        llm_response = {
+                            "analyst_info": mock_data.get("analyst_info", {}),
+                            "job_analysis": mock_data.get("rankings", [])
+                        }
+                    
+                    # 标准化分析结果
+                    analyst_result = {
+                        "analyst_id": analyst["id"],
+                        "analyst_name": analyst["name"],
+                        "perspective": analyst["perspective"],
+                        "focus": analyst["focus"],
+                        "weight": analyst["weight"],
+                        "analyst_info": llm_response.get("analyst_info", {}),
+                        "rankings": []
+                    }
+                    
+                    # 处理每个职位的分析
+                    job_analysis = llm_response.get("job_analysis", llm_response.get("rankings", []))
+                    for job_result in job_analysis:
+                        ranking_item = {
+                            "job_index": job_result.get("job_index", 0),
+                            "job_title": job_result.get("job_title", job_result.get("position", "")),
+                            "company": job_result.get("company_name", job_result.get("company", "")),
+                            "score": job_result.get("score", job_result.get("recommendation_score", 75)),
+                            "detailed_scores": job_result.get("detailed_scores", {}),
+                            "reason": job_result.get("analysis_reason", job_result.get("ranking_reason", "分析中..."))
+                        }
+                        analyst_result["rankings"].append(ranking_item)
+                        all_rankings.append(ranking_item)
+                    
+                    llm_analysis.append(analyst_result)
+                    
+                except Exception as e:
+                    logger.error(f"Error processing analyst {analyst['name']}: {e}")
+                    continue
+            
+            # 综合所有分析师的结果生成最终排序
             final_ranking = []
             for i, job in enumerate(jobs):
-                job_scores = [r["score"] for r in all_rankings if r["job_index"] == i]
-                avg_score = sum(job_scores) / len(job_scores) if job_scores else 0
+                # 收集所有分析师对该职位的评分
+                job_scores = []
+                job_reasons = []
+                weighted_score = 0
+                total_weight = 0
+                
+                for analysis in llm_analysis:
+                    for ranking in analysis["rankings"]:
+                        if ranking["job_index"] == i:
+                            score = ranking["score"]
+                            weight = analysis["weight"]
+                            job_scores.append(score)
+                            job_reasons.append(f"{analysis['analyst_name']}: {ranking['reason']}")
+                            weighted_score += score * weight
+                            total_weight += weight
+                            break
+                
+                if total_weight > 0:
+                    avg_score = weighted_score / total_weight
+                else:
+                    avg_score = 70  # 默认分数
                 
                 final_ranking.append({
                     "rank": 0,  # 将在排序后更新
+                    "job_index": i,
                     "job_title": job.get("job_title", ""),
                     "company": job.get("company_name", ""),
                     "score": round(avg_score, 1),
-                    "individual_scores": job_scores
+                    "individual_scores": job_scores,
+                    "consensus": "高" if len(job_scores) > 1 and max(job_scores) - min(job_scores) <= 10 else "中等",
+                    "analysis_summary": " | ".join(job_reasons[:2])  # 显示前两个主要理由
                 })
             
-            # 按综合分数重新排序
+            # 按综合分数排序
             final_ranking.sort(key=lambda x: x["score"], reverse=True)
             
             # 更新最终排名
             for i, item in enumerate(final_ranking):
                 item["rank"] = i + 1
             
-            # **关键修改：调用LLM生成综合分析总结**
-            final_summary = Phase4ScheduleAgent._generate_llm_summary(personal_info, final_ranking, llm_analysis)
+            # 生成综合分析总结
+            candidate_name = personal_info.get("name", "候选人")
+            job_count = len(jobs)
+            top_job = final_ranking[0] if final_ranking else None
+            
+            if top_job:
+                final_summary = f"经过{len(llm_analysis)}位AI分析师的多维度评估，为{candidate_name}分析了{job_count}个职位机会。"
+                final_summary += f"最推荐的是{top_job['company']}的{top_job['job_title']}职位（综合评分：{top_job['score']}分）。"
+                final_summary += f"分析师们的意见共识度为{top_job['consensus']}，建议优先考虑该职位的面试安排。"
+            else:
+                final_summary = f"未能为{candidate_name}找到合适的职位推荐，建议调整搜索条件或提升相关技能。"
             
             return {
+                "success": True,
                 "llm_analysis": llm_analysis,
-                "final_ranking": final_ranking,
+                "final_ranking": final_ranking, 
                 "final_summary": final_summary,
                 "analysis_time": datetime.now().isoformat(),
-                "candidate_name": personal_info.get("name", "候选人")
+                "candidate_name": candidate_name,
+                "total_analysts": len(llm_analysis),
+                "total_jobs": job_count
             }
             
         except Exception as e:
             logger.error(f"Error in multi-LLM recommendation: {e}")
             return {
+                "success": False,
+                "error": str(e),
                 "llm_analysis": [],
                 "final_ranking": [],
-                "final_summary": "分析过程中出现错误，请重试",
-                "error": str(e)
+                "final_summary": "分析过程中出现错误，请重试"
             }
 
     @staticmethod

@@ -1,13 +1,19 @@
 <template>
-  <div class="phase2-container">
-    <!-- 个人信息表单 - 保持不变 -->
-    <el-card class="profile-card">
-      <template #header>
-        <div class="card-header">
-          <h2><el-icon><Document /></el-icon> Phase 2: 简历制作</h2>
-          <p>填写您的详细信息，我们将为您生成个性化简历</p>
-        </div>
-      </template>
+  <div class="phase2-page">
+    <!-- 粒子背景动画 -->
+    <div class="particles-background">
+      <div class="particle" v-for="n in 100" :key="n" :style="getParticleStyle()"></div>
+    </div>
+    
+    <div class="phase2-container">
+      <!-- 个人信息表单 - 保持不变 -->
+      <el-card class="profile-card">
+        <template #header>
+          <div class="card-header">
+            <h2><el-icon><Document /></el-icon> Phase 2: 简历制作</h2>
+            <p>填写您的详细信息，我们将为您生成个性化简历</p>
+          </div>
+        </template>
 
       <!-- 原有的用户信息表单保持不变 -->
       <el-form :model="userProfile" label-width="120px" ref="profileForm" :rules="formRules">
@@ -1128,6 +1134,7 @@
         </span>
       </template>
     </el-dialog>
+    </div>
   </div>
 </template>
 
@@ -3567,6 +3574,16 @@ export default {
         console.error('加载优化历史失败:', e)
       }
     }
+    
+    // 粒子动画样式生成
+    const getParticleStyle = () => {
+      return {
+        left: Math.random() * 100 + '%',
+        animationDelay: Math.random() * 20 + 's',
+        animationDuration: (Math.random() * 10 + 10) + 's',
+        opacity: Math.random() * 0.6 + 0.2
+      }
+    }
 
     return {
       store,
@@ -3691,17 +3708,83 @@ export default {
       removeVolunteer,
       addArrayItem,
       removeArrayItem,
-      removeTag
+      removeTag,
+      // 粒子动画
+      getParticleStyle
     }
   }
 }
 </script>
 
 <style scoped>
+.phase2-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #e8f4fd 25%, #f0f8ff 50%, #e6f3ff 75%, #f8fafc 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 粒子背景动画 */
+.particles-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: radial-gradient(circle, rgba(64, 158, 255, 1) 0%, rgba(64, 158, 255, 0.4) 50%, transparent 100%);
+  border-radius: 50%;
+  animation: float linear infinite;
+}
+
+.particle:nth-child(2n) {
+  background: radial-gradient(circle, rgba(103, 194, 58, 1) 0%, rgba(103, 194, 58, 0.4) 50%, transparent 100%);
+  width: 5px;
+  height: 5px;
+}
+
+.particle:nth-child(3n) {
+  background: radial-gradient(circle, rgba(255, 193, 7, 1) 0%, rgba(255, 193, 7, 0.4) 50%, transparent 100%);
+  width: 7px;
+  height: 7px;
+}
+
+.particle:nth-child(4n) {
+  background: radial-gradient(circle, rgba(245, 108, 108, 1) 0%, rgba(245, 108, 108, 0.4) 50%, transparent 100%);
+  width: 4px;
+  height: 4px;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(100vh) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
 .phase2-container {
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
+  position: relative;
+  z-index: 1;
 }
 
 .profile-card, .selected-jobs-card, .generation-progress-card, .actions-card {

@@ -91,7 +91,9 @@ class SearchAgent:
                     messages=[
                         {"role": "user", "content": prompt}
                     ],
-                    timeout=60
+                    timeout=60,
+                    max_tokens=4000,
+                    temperature=0.7,
                     # response_format={ "type": "json_object" }
                 )
 

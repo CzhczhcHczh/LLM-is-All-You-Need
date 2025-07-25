@@ -1,33 +1,39 @@
 <template>
-  <div class="phase3-container">
-    <!-- 优化进度指示器 -->
-    <div v-if="progressInfo.show" class="optimization-progress-overlay">
-      <el-card class="progress-card">
-        <div class="progress-content">
-          <h3><el-icon><Loading /></el-icon> 简历优化中...</h3>
-          <el-progress 
-            :percentage="Math.floor(progressInfo.value * 100)" 
-            :color="progressInfo.color"
-            :stroke-width="8"
-          />
-          <p class="progress-text">{{ progressInfo.text }}</p>
-          <div class="progress-steps">
-            <el-tag :type="progressInfo.value >= 0.2 ? 'success' : 'info'">解析简历数据</el-tag>
-            <el-tag :type="progressInfo.value >= 0.5 ? 'success' : 'info'">分析HR反馈</el-tag>
-            <el-tag :type="progressInfo.value >= 0.8 ? 'success' : 'info'">生成优化版本</el-tag>
-            <el-tag :type="progressInfo.value >= 1.0 ? 'success' : 'info'">完成优化</el-tag>
-          </div>
-        </div>
-      </el-card>
+  <div class="phase3-page">
+    <!-- 粒子背景动画 -->
+    <div class="particles-background">
+      <div class="particle" v-for="n in 100" :key="n" :style="getParticleStyle()"></div>
     </div>
+    
+    <div class="phase3-container">
+      <!-- 优化进度指示器 -->
+      <div v-if="progressInfo.show" class="optimization-progress-overlay">
+        <el-card class="progress-card">
+          <div class="progress-content">
+            <h3><el-icon><Loading /></el-icon> 简历优化中...</h3>
+            <el-progress 
+              :percentage="Math.floor(progressInfo.value * 100)" 
+              :color="progressInfo.color"
+              :stroke-width="8"
+            />
+            <p class="progress-text">{{ progressInfo.text }}</p>
+            <div class="progress-steps">
+              <el-tag :type="progressInfo.value >= 0.2 ? 'success' : 'info'">解析简历数据</el-tag>
+              <el-tag :type="progressInfo.value >= 0.5 ? 'success' : 'info'">分析HR反馈</el-tag>
+              <el-tag :type="progressInfo.value >= 0.8 ? 'success' : 'info'">生成优化版本</el-tag>
+              <el-tag :type="progressInfo.value >= 1.0 ? 'success' : 'info'">完成优化</el-tag>
+            </div>
+          </div>
+        </el-card>
+      </div>
 
-    <el-card class="hr-card">
-      <template #header>
-        <div class="card-header">
-          <h2><el-icon><User /></el-icon> Phase 3: HR模拟</h2>
-          <p>AI将模拟不同类型的HR对您的简历进行评估和反馈</p>
-        </div>
-      </template>
+      <el-card class="hr-card">
+        <template #header>
+          <div class="card-header">
+            <h2><el-icon><User /></el-icon> Phase 3: HR模拟</h2>
+            <p>AI将模拟不同类型的HR对您的简历进行评估和反馈</p>
+          </div>
+        </template>
 
       <!-- 多份简历列表 -->
       <div class="resumes-section">
@@ -270,7 +276,7 @@
     </el-card>
 
     <!-- 新增：评估进度条 -->
-    <el-card v-if="evaluationProgress.show" class="progress-card">
+    <el-card v-if="evaluationProgress.show" class="evaluation-progress-card">
       <template #header>
         <div class="progress-header">
           <h3>
@@ -631,12 +637,12 @@
       
       <el-timeline>
         <el-timeline-item 
-          v-for="(feedback, index) in feedbackHistory" 
+          v-for="(feedback, index) in  [...feedbackHistory].reverse()" 
           :key="index"
           :timestamp="feedback.timestamp"
         >
           <div class="history-item">
-            <h5>第{{ index + 1 }}轮反馈 - {{ feedback.persona_name }}</h5>
+            <h5>第{{ feedbackHistory.length - index }}轮反馈 - {{ feedback.persona_name }}</h5>
             <p>评分: {{ feedback.score }}/100</p>
             <p>{{ feedback.passes_screening ? '✅ 通过初筛' : '❌ 未通过初筛' }}</p>
           </div>
@@ -916,6 +922,7 @@
         </div>
       </div>
     </el-card>
+    </div>
   </div>
 </template>
 
@@ -2339,6 +2346,16 @@ export default {
       initializeResumeList()
     })
     
+    // 粒子动画样式生成
+    const getParticleStyle = () => {
+      return {
+        left: Math.random() * 100 + '%',
+        animationDelay: Math.random() * 20 + 's',
+        animationDuration: (Math.random() * 10 + 10) + 's',
+        opacity: Math.random() * 0.6 + 0.2
+      }
+    }
+    
     return {
       // 响应式数据
       resumeList,
@@ -2443,16 +2460,83 @@ export default {
       finishInterview,
       restartInterview,
       resetInterview,
-      store
+      store,
+      // 粒子动画
+      getParticleStyle
     }
   }
 }
 </script>
 
 <style scoped>
+.phase3-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #e8f4fd 25%, #f0f8ff 50%, #e6f3ff 75%, #f8fafc 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 粒子背景动画 */
+.particles-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: radial-gradient(circle, rgba(64, 158, 255, 1) 0%, rgba(64, 158, 255, 0.4) 50%, transparent 100%);
+  border-radius: 50%;
+  animation: float linear infinite;
+}
+
+.particle:nth-child(2n) {
+  background: radial-gradient(circle, rgba(103, 194, 58, 1) 0%, rgba(103, 194, 58, 0.4) 50%, transparent 100%);
+  width: 5px;
+  height: 5px;
+}
+
+.particle:nth-child(3n) {
+  background: radial-gradient(circle, rgba(255, 193, 7, 1) 0%, rgba(255, 193, 7, 0.4) 50%, transparent 100%);
+  width: 7px;
+  height: 7px;
+}
+
+.particle:nth-child(4n) {
+  background: radial-gradient(circle, rgba(245, 108, 108, 1) 0%, rgba(245, 108, 108, 0.4) 50%, transparent 100%);
+  width: 4px;
+  height: 4px;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(100vh) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
 .phase3-container {
   max-width: 1200px;
   margin: 0 auto;
+  position: relative;
+  z-index: 1;
+  padding: 20px 16px;
 }
 
 /* 优化进度指示器样式 */
@@ -2609,7 +2693,7 @@ export default {
 /* 评估进度卡片样式 */
 .evaluation-progress-card {
   margin-bottom: 20px;
-  /* 移除最大宽度限制，让它与其他卡片保持一致 */
+  /* 与其他主要卡片保持一致的宽度 */
 }
 
 .evaluation-progress-content {
@@ -2619,7 +2703,7 @@ export default {
 
 .progress-header {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
 }
 
@@ -2629,7 +2713,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
 }
 
@@ -2641,7 +2725,7 @@ export default {
 
 .progress-content {
   text-align: center;
-  padding: 20px;
+  padding: 24px;
 }
 
 .progress-content h3 {
@@ -2654,9 +2738,10 @@ export default {
 }
 
 .progress-text {
-  margin: 15px 0;
+  margin: 20px 0 0 0;
   color: #606266;
   font-size: 14px;
+  font-weight: 500;
 }
 
 .progress-steps {
@@ -2759,7 +2844,7 @@ export default {
   }
 }
 
-.hr-card, .feedback-card, .history-card {
+.hr-card, .feedback-card, .history-card, .evaluation-progress-card {
   margin-bottom: 20px;
 }
 

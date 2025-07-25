@@ -26,7 +26,7 @@ class LLMService:
     """LLM service for calling different models."""
     
     @staticmethod
-    def call_model(model_name: str, messages: List[Dict[str, str]], temperature: float = 0.7) -> str:
+    def call_model(model_name: str, messages: List[Dict[str, str]], temperature: float = 0.7, js: bool = False) -> str:
         """Call LLM model with messages."""
         try:
             # 验证输入参数
@@ -39,14 +39,28 @@ class LLMService:
             logger.info(f"Calling model: {model_name}")
             logger.debug(f"Messages: {messages}")
             
-            # 调用OpenAI API
-            response = openai_client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=4000
-            )
-            
+            # # 调用OpenAI API
+            # response = openai_client.chat.completions.create(
+            #     model=model_name,
+            #     messages=messages,
+            #     temperature=temperature,
+            #     max_tokens=4000
+            # )
+            if js is True:
+                response = openai_client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=4000,
+                    response_format={ "type": "json_object" }
+                )
+            else:
+                response = openai_client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=4000
+                )
             # 验证响应对象
             if not hasattr(response, 'choices'):
                 logger.error(f"Invalid response type: {type(response)}")
@@ -297,13 +311,15 @@ class LLMService:
     def call_phase4_models(prompt: str) -> List[str]:
         """Call multiple Phase 4 models for scheduling discussion."""
         results = []
-        for model in settings.phase4_models_list:
-            messages = [{"role": "user", "content": prompt}]
-            result = LLMService.call_model(model, messages)
-            results.append({
-                "model": model,
-                "response": result
-            })
+        try:
+            for model in settings.phase4_models_list:
+                messages = [{"role": "user", "content": prompt}]
+                result = LLMService.call_model(model, messages, js=False)
+                results.append(result)  # 直接添加响应字符串
+        except Exception as e:
+            logger.error(f"Error calling phase4 models: {e}")
+            # 返回演示数据
+            results.append(LLMService._get_demo_generic_response())
         return results
 
 

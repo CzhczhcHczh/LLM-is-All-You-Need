@@ -187,6 +187,21 @@ export const apiService = {
     return api.post(`/phase4/schedule/${scheduleId}/approve`)
   },
   
+  // Phase 4 - 多LLM推荐分析
+  multiLLMRecommendation(personalInfo, jobs) {
+    return api.post('/phase4/multi-llm-recommendation', {
+      personal_info: personalInfo,
+      jobs: jobs
+    })
+  },
+
+  // Phase 4 - 生成最终面试日程（使用LLM智能安排）
+  generateInterviewSchedule(rankedJobs, userPreferences) {
+    return api.post('/phase4/generate-schedule', {
+      ranked_jobs: rankedJobs,
+      user_preferences: userPreferences
+    })
+  },
   // 新增：健康检查API
   healthCheck() {
     return api.get('/health')
@@ -195,7 +210,7 @@ export const apiService = {
   // 新增：获取可用模型列表
   getAvailableModels() {
     return api.get('/models')
-    },
+  },
   generateSelfIntroduction(strengths, weaknesses, minLength = 300, options = {}) {
     return api.post('/phase3/self-introduction', {
       strengths,
@@ -302,7 +317,12 @@ export const apiService = {
         results: []
       }
     }
-  }
+  },
+  
+  // Phase 4 - 智能多Agent调度（完整流程）
+  multiAgentDiscussion(payload) {
+    return api.post('/phase4/multi-agent-discussion', payload)
+  },
 }
 
 export default api

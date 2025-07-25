@@ -17,6 +17,7 @@ from database import (
 )
 
 from SearchAgent import SearchAgent
+from Phase4ScheduleAgent import Phase4ScheduleAgent as Phase4Agent
 
 def ensure_dict(obj):
     """确保对象是字典格式"""
@@ -1958,7 +1959,9 @@ class Phase3HRAgent:
                 # 基于简历内容生成智能默认分数
                 default_score = Phase3HRAgent._generate_intelligent_score(weight_key, resume_content, job_posting)
                 detailed_scores[weight_key] = default_score
-                logger.info(f"Generated intelligent score for {weight_key}: {default_score}")
+                logger.info(f"Generated intelligent score for {weight_key}: {default_score} (HR persona: {hr_persona})")
+            else:
+                logger.info(f"Using provided score for {weight_key}: {detailed_scores[weight_key]} (HR persona: {hr_persona})")
         
         # 重新计算总分（严格按照权重）
         weighted_score = 0
@@ -1968,7 +1971,47 @@ class Phase3HRAgent:
         logger.info(f"详细分数: {detailed_scores}")
         
         for weight_key, weight_value in weights.items():
-            score = detailed_scores.get(weight_key, 60)
+            raw_score = detailed_scores.get(weight_key, 60)
+            
+            # 确保分数是数字类型
+            try:
+                if isinstance(raw_score, dict):
+                    # 如果是字典，尝试提取数字值
+                    if 'score' in raw_score:
+                        score = float(raw_score['score'])
+                    elif 'value' in raw_score:
+                        score = float(raw_score['value'])
+                    else:
+                        # 如果无法提取，使用默认值
+                        logger.warning(f"Score for {weight_key} is a dict without 'score' or 'value' key: {raw_score}")
+                        score = 60
+                        detailed_scores[weight_key] = score  # 更新为数字值
+                elif isinstance(raw_score, (int, float)):
+                    score = float(raw_score)
+                elif isinstance(raw_score, str):
+                    # 尝试从字符串中提取数字
+                    import re
+                    number_match = re.search(r'\d+(?:\.\d+)?', raw_score)
+                    if number_match:
+                        score = float(number_match.group())
+                    else:
+                        score = 60
+                        logger.warning(f"Could not extract number from string score for {weight_key}: {raw_score}")
+                    detailed_scores[weight_key] = score  # 更新为数字值
+                else:
+                    score = 60
+                    logger.warning(f"Unexpected score type for {weight_key}: {type(raw_score)} = {raw_score}")
+                    detailed_scores[weight_key] = score  # 更新为数字值
+                    
+                # 确保分数在合理范围内
+                score = max(0, min(100, score))
+                detailed_scores[weight_key] = score  # 确保存储的是清理后的数字值
+                
+            except (ValueError, TypeError) as e:
+                logger.error(f"Error converting score for {weight_key}: {e}, using default score 60")
+                score = 60
+                detailed_scores[weight_key] = score
+            
             contribution = score * weight_value
             weighted_score += contribution
             total_weight += weight_value
@@ -1989,6 +2032,20 @@ class Phase3HRAgent:
         feedback_content["detailed_scores"] = detailed_scores
         feedback_content["overall_score"] = final_score
         feedback_content["passes_initial_screening"] = final_score >= persona_config["pass_threshold"]
+        
+        # 最终验证：确保详细分数包含所有必需的字段
+        missing_fields = []
+        for weight_key in weights.keys():
+            if weight_key not in feedback_content["detailed_scores"]:
+                missing_fields.append(weight_key)
+        
+        if missing_fields:
+            logger.warning(f"Final validation failed: missing detailed_scores fields {missing_fields} for HR persona {hr_persona}")
+            # 补充缺失的字段
+            for field in missing_fields:
+                feedback_content["detailed_scores"][field] = Phase3HRAgent._generate_intelligent_score(field, resume_content, job_posting)
+        
+        logger.info(f"Final detailed_scores for {hr_persona}: {feedback_content['detailed_scores']}")
         
         # 确保关键字段存在并有实质内容
         if not feedback_content.get("strengths"):
@@ -2023,10 +2080,16 @@ class Phase3HRAgent:
         resume_content = ensure_dict(resume_content)
         job_posting = ensure_dict(job_posting)
         
+        # 获取基础数据
+        experience = safe_get(resume_content, "experience", [])
+        skills = safe_get(resume_content, "skills", [])
+        education = safe_get(resume_content, "education", [])
+        projects = safe_get(resume_content, "projects", [])
+        
         # 根据不同评估维度调整分数
-        if "experience" in metric.lower():
-            # 工作经验评估
-            experience = safe_get(resume_content, "experience", [])
+        
+        # === 经验丰富HR的字段 ===
+        if metric == "experience_match":
             if len(experience) >= 3:
                 base_score += 15
             elif len(experience) >= 1:
@@ -2039,10 +2102,170 @@ class Phase3HRAgent:
                 if any(keyword in exp_title for keyword in ["开发", "工程师", "程序员", "技术"]):
                     base_score += 10
                     break
+                    
+        elif metric == "skills_proficiency":
+            if len(skills) >= 8:
+                base_score += 20
+            elif len(skills) >= 5:
+                base_score += 15
+            elif len(skills) >= 3:
+                base_score += 10
+                
+        elif metric == "performance_results":
+            # 检查工作经验中是否有业绩描述
+            for exp in experience:
+                exp_desc = str(safe_get(exp, "description", "")).lower()
+                if any(keyword in exp_desc for keyword in ["提升", "优化", "增长", "完成", "实现", "%"]):
+                    base_score += 15
+                    break
+            
+            # 检查项目经验
+            if len(projects) >= 2:
+                base_score += 10
+                
+        elif metric == "career_stability":
+            # 职业稳定性评估
+            if len(experience) >= 2:
+                # 计算平均在职时长（简化评估）
+                base_score += 10
+            if len(experience) <= 3:  # 跳槽不频繁
+                base_score += 10
+                
+        elif metric == "resume_professionalism":
+            # 简历专业性评估
+            if education and skills and experience:
+                base_score += 15
+            
+        # === 保守型HR的字段 ===
+        elif metric == "education_background":
+            if education:
+                edu_str = str(education).lower()
+                if "硕士" in edu_str or "研究生" in edu_str:
+                    base_score += 20
+                elif "本科" in edu_str or "学士" in edu_str:
+                    base_score += 15
+                elif "专科" in edu_str:
+                    base_score += 10
+                    
+        elif metric == "work_stability":
+            # 工作稳定性（与career_stability类似）
+            if len(experience) >= 2:
+                base_score += 15
+            if len(experience) <= 3:  # 跳槽不频繁
+                base_score += 10
+                
+        elif metric == "culture_fit":
+            # 企业文化匹配（基于经验和教育背景评估）
+            if education:
+                base_score += 10
+            if len(experience) >= 2:
+                base_score += 10
+                
+        elif metric == "basic_skills":
+            # 基础技能
+            if len(skills) >= 3:
+                base_score += 15
+            elif len(skills) >= 1:
+                base_score += 10
+                
+        elif metric == "character_assessment":
+            # 品格素养（基于整体简历完整性）
+            if education and skills and experience:
+                base_score += 15
+            
+        # === 开放型HR的字段 ===
+        elif metric == "learning_potential":
+            # 学习能力与潜力
+            if len(skills) >= 5:  # 技能多样说明学习能力强
+                base_score += 15
+            if len(projects) >= 2:  # 项目经验多说明实践能力强
+                base_score += 10
+                
+        elif metric == "innovation_thinking":
+            # 创新思维
+            if len(projects) >= 3:  # 项目经验丰富说明有创新实践
+                base_score += 15
+            # 检查是否有创新相关描述
+            for proj in projects:
+                proj_desc = str(safe_get(proj, "description", "")).lower()
+                if any(keyword in proj_desc for keyword in ["创新", "优化", "改进", "设计", "架构"]):
+                    base_score += 10
+                    break
+                    
+        elif metric == "adaptability":
+            # 适应性与灵活性
+            if len(experience) >= 2:  # 多段经验说明适应性强
+                base_score += 10
+            if len(skills) >= 6:  # 技能多样说明适应性强
+                base_score += 10
+                
+        elif metric == "soft_skills":
+            # 软技能
+            if len(experience) >= 2:  # 工作经验多说明软技能好
+                base_score += 10
+            if len(projects) >= 2:  # 项目经验说明协作能力
+                base_score += 10
+                
+        elif metric == "current_skills_match":
+            # 当前技能匹配度
+            if len(skills) >= 5:
+                base_score += 15
+            elif len(skills) >= 3:
+                base_score += 10
+            
+        # === 技术型HR的字段 ===
+        elif metric == "technical_depth":
+            # 技术深度与专业度
+            tech_skills = [s for s in skills if any(keyword in str(s).lower() 
+                          for keyword in ["java", "python", "javascript", "react", "vue", "spring", "mysql", "redis"])]
+            if len(tech_skills) >= 5:
+                base_score += 20
+            elif len(tech_skills) >= 3:
+                base_score += 15
+                
+        elif metric == "project_complexity":
+            # 项目技术含量
+            if len(projects) >= 3:
+                base_score += 20
+            elif len(projects) >= 2:
+                base_score += 15
+            elif len(projects) >= 1:
+                base_score += 10
+                
+        elif metric == "technical_breadth":
+            # 技术广度与学习能力
+            if len(skills) >= 8:
+                base_score += 20
+            elif len(skills) >= 6:
+                base_score += 15
+                
+        elif metric == "practical_experience":
+            # 技术实践经验
+            if len(experience) >= 2 and len(projects) >= 2:
+                base_score += 20
+            elif len(experience) >= 1 or len(projects) >= 1:
+                base_score += 10
+                
+        elif metric == "technical_vision":
+            # 技术前瞻性
+            # 检查是否有新技术相关技能
+            modern_tech = [s for s in skills if any(keyword in str(s).lower() 
+                          for keyword in ["cloud", "docker", "kubernetes", "微服务", "分布式"])]
+            if len(modern_tech) >= 2:
+                base_score += 15
+            elif len(modern_tech) >= 1:
+                base_score += 10
+                
+        # === 通用字段处理（兼容其他可能的字段名） ===
+        elif "experience" in metric.lower():
+            # 工作经验相关的通用处理
+            if len(experience) >= 3:
+                base_score += 15
+            elif len(experience) >= 1:
+                base_score += 10
         
         elif "skill" in metric.lower():
-            # 技能评估
-            skills = safe_get(resume_content, "skills", [])
+            # 技能相关的通用处理
             if len(skills) >= 8:
                 base_score += 20
             elif len(skills) >= 5:
@@ -2051,8 +2274,7 @@ class Phase3HRAgent:
                 base_score += 10
         
         elif "education" in metric.lower():
-            # 教育背景评估
-            education = safe_get(resume_content, "education", [])
+            # 教育背景相关的通用处理
             if education:
                 edu_str = str(education).lower()
                 if "硕士" in edu_str or "研究生" in edu_str:
@@ -2147,8 +2369,31 @@ class Phase3HRAgent:
         resume_content = ensure_dict(resume_content)
         job_posting = ensure_dict(job_posting)
         
+        # 安全地提取数字分数的辅助函数
+        def safe_get_score(scores_dict, key, default=60):
+            """安全地从scores字典中提取数字分数"""
+            value = scores_dict.get(key, default)
+            if isinstance(value, (int, float)):
+                return value
+            elif isinstance(value, dict):
+                # 如果是字典，尝试提取数字值
+                if 'score' in value:
+                    return value['score'] if isinstance(value['score'], (int, float)) else default
+                elif 'value' in value:
+                    return value['value'] if isinstance(value['value'], (int, float)) else default
+                else:
+                    return default
+            elif isinstance(value, str):
+                # 尝试从字符串中提取数字
+                import re
+                number_match = re.search(r'\d+(?:\.\d+)?', value)
+                return float(number_match.group()) if number_match else default
+            else:
+                return default
+        
         # 工作经验分析（不少于100字）
-        experience_score = detailed_scores.get("experience_match", detailed_scores.get("work_experience", 60))
+        experience_score = safe_get_score(detailed_scores, "experience_match", 
+                                        safe_get_score(detailed_scores, "work_experience", 60))
         experience_data = safe_get(resume_content, "experience", [])
         
         experience_analysis = f"""工作经验评估得分{experience_score}分。候选人拥有{len(experience_data)}段工作经历，"""
@@ -2163,7 +2408,8 @@ class Phase3HRAgent:
         analysis["experience_analysis"] = experience_analysis
         
         # 技能评价分析（不少于100字）
-        skills_score = detailed_scores.get("skills_proficiency", detailed_scores.get("technical_skills", 60))
+        skills_score = safe_get_score(detailed_scores, "skills_proficiency", 
+                                    safe_get_score(detailed_scores, "technical_skills", 60))
         skills_data = safe_get(resume_content, "skills", [])
         
         skills_analysis = f"""技能评价得分{skills_score}分。候选人掌握了{len(skills_data)}项专业技能，"""
@@ -2178,7 +2424,8 @@ class Phase3HRAgent:
         analysis["skills_analysis"] = skills_analysis
         
         # 教育背景分析（不少于100字）
-        education_score = detailed_scores.get("education_background", detailed_scores.get("education", 60))
+        education_score = safe_get_score(detailed_scores, "education_background", 
+                                       safe_get_score(detailed_scores, "education", 60))
         education_data = safe_get(resume_content, "education", [])
         
         education_analysis = f"""教育背景评估得分{education_score}分。"""
@@ -2332,11 +2579,20 @@ class Phase3HRAgent:
         # 为每个权重键生成智能分数
         detailed_scores = {}
         for weight_key in weights.keys():
-            detailed_scores[weight_key] = Phase3HRAgent._generate_intelligent_score(weight_key, resume_content, job_posting)
+            score = Phase3HRAgent._generate_intelligent_score(weight_key, resume_content, job_posting)
+            # 确保分数是数字类型
+            if not isinstance(score, (int, float)):
+                logger.warning(f"Generated score for {weight_key} is not a number: {score}, using 60")
+                score = 60
+            detailed_scores[weight_key] = score
         
         # 计算总分
-        weighted_score = sum(score * weight for score, weight in zip(detailed_scores.values(), weights.values()))
-        final_score = round(weighted_score)
+        try:
+            weighted_score = sum(score * weight for score, weight in zip(detailed_scores.values(), weights.values()))
+            final_score = round(weighted_score)
+        except (TypeError, ValueError) as e:
+            logger.error(f"Error calculating weighted score in default feedback: {e}")
+            final_score = 60
         
         return {
             "overall_score": final_score,
@@ -3031,4 +3287,4 @@ class Phase4ScheduleAgent:
 search_agent = SearchAgent()
 phase2_agent = Phase2ResumeAgent()
 phase3_agent = Phase3HRAgent()
-phase4_agent = Phase4ScheduleAgent()
+phase4_agent = Phase4Agent()  # 使用从Phase4ScheduleAgent.py导入的完整类

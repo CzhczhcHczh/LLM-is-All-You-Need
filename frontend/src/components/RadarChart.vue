@@ -19,30 +19,48 @@ const props = defineProps({
   }
 })
 
-const option = computed(() => ({
-  tooltip: {},
-  radar: {
-    indicator: [
-      { name: '工作经验匹配度', max: 100 },
-      { name: '技能专业程度', max: 100 },
-      { name: '业绩表现', max: 100 },
-      { name: '职业稳定性', max: 100 },
-      { name: '简历专业性', max: 100 }
-    ],
-    radius: 110
-  },
-  series: [{
-    type: 'radar',
-    data: [{
-      value: [
-        props.scores.experience_match || 0,
-        props.scores.skills_proficiency || 0,
-        props.scores.performance_results || 0,
-        props.scores.career_stability || 0,
-        props.scores.resume_professionalism || 0
-      ],
-      name: '能力雷达'
+const option = computed(() => {
+  // 从scores对象中提取所有键值对
+  const dimensions = Object.entries(props.scores);
+  
+  // 限制最多显示5个维度，避免雷达图过于复杂
+  const limitedDimensions = dimensions.slice(0, 5);
+  
+  // 创建通用维度名称（维度1，维度2，...）
+  const indicators = limitedDimensions.map((item, index) => {
+    return { name: `维度${index + 1}`, max: 100 };
+  });
+  
+  // 提取值
+  const values = limitedDimensions.map(item => item[1] || 0);
+  
+  return {
+    tooltip: {
+      formatter: (params) => {
+        // 在tooltip中显示实际的维度名称和值
+        const data = params.data;
+        let result = `${data.name}<br/>`;
+        limitedDimensions.forEach((dim, index) => {
+          // 将键名格式化为更可读的文本
+          const readableName = dim[0]
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+          result += `${readableName}: ${data.value[index]}<br/>`;
+        });
+        return result;
+      }
+    },
+    radar: {
+      indicator: indicators,
+      radius: 110
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: values,
+        name: '能力评估'
+      }]
     }]
-  }]
-}))
+  };
+})
 </script>
